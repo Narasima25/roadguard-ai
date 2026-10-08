@@ -15,12 +15,12 @@ from flask_cors import CORS
 import cv2  # type: ignore
 import numpy as np  # type: ignore
 from PIL import Image, ExifTags  # type: ignore
-import torch
-torch.set_num_threads(1)
 try:
+    import torch  # type: ignore
+    torch.set_num_threads(1)
     torch.set_grad_enabled(False)
 except Exception:
-    pass
+    torch = None
 
 def extract_exif_gps(image_path):
     """
@@ -322,7 +322,10 @@ def detect_damage():
     if model is None:
         load_ai_model()
 
-    with torch.no_grad():
+    if torch is not None:
+        with torch.no_grad():
+            results = model.predict(img, conf=0.25, imgsz=480, device="cpu", verbose=False)
+    else:
         results = model.predict(img, conf=0.25, imgsz=480, device="cpu", verbose=False)
     
     detections = []
