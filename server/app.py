@@ -508,21 +508,37 @@ def ensure_ssl_certs():
 if __name__ == "__main__":
     import sys
     use_https = "--https" in sys.argv
-    default_port = 7860 if os.environ.get("SPACE_ID") else 5000
+    is_render = bool(os.environ.get("RENDER"))
+    is_hf = bool(os.environ.get("SPACE_ID"))
+    is_cloud = is_render or is_hf
+    default_port = 10000 if is_render else (7860 if is_hf else 5000)
     port = int(os.environ.get("PORT", default_port))
+
+    # Detect active environment URL
+    render_url = os.environ.get("RENDER_EXTERNAL_URL")
+    if render_url:
+        dashboard_url = render_url
+        mobile_url = f"{render_url}/mobile"
+        env_label = "☁️ Render Cloud (Live Public HTTPS)"
+    elif is_hf:
+        dashboard_url = f"https://huggingface.co/spaces/{os.environ.get('SPACE_ID', '')}"
+        mobile_url = f"{dashboard_url}/mobile"
+        env_label = "☁️ Hugging Face Space"
+    else:
+        proto = "https" if use_https else "http"
+        dashboard_url = f"{proto}://localhost:{port}"
+        mobile_url = f"{proto}://localhost:{port}/mobile"
+        env_label = "💻 Local Computer"
 
     print(f"\n=======================================================")
     print(f"🛣️  ROAD DAMAGE AI DETECTION SYSTEM READY")
-    protocol = "https" if use_https else "http"
-    print(f"👉 Officer Portal Dashboard: {protocol}://localhost:{port}")
-    print(f"👉 Mobile Camera Interface:  {protocol}://localhost:{port}/mobile")
-    if use_https:
-        print(f"🔒 HTTPS ACTIVE: Device Satellite GPS & Camera Fully Unlocked!")
+    print(f"🌐 Environment: {env_label}")
+    print(f"👉 Officer Portal Dashboard: {dashboard_url}")
+    print(f"👉 Mobile Camera Interface:  {mobile_url}")
     print(f"=======================================================\n")
 
     if use_https:
         cert_p, key_p = ensure_ssl_certs()
-        app.run(host="0.0.0.0", port=port, ssl_context=(cert_p, key_p), debug=True)
+        app.run(host="0.0.0.0", port=port, ssl_context=(cert_p, key_p), debug=not is_cloud)
     else:
-        is_hf = bool(os.environ.get("SPACE_ID"))
-        app.run(host="0.0.0.0", port=port, debug=not is_hf)
+        app.run(host="0.0.0.0", port=port, debug=not is_cloud)
