@@ -1,4 +1,11 @@
 import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["FLASK_DEBUG"] = "0"
+import gc
 import sqlite3
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -8,6 +15,12 @@ from flask_cors import CORS
 import cv2  # type: ignore
 import numpy as np  # type: ignore
 from PIL import Image, ExifTags  # type: ignore
+import torch
+torch.set_num_threads(1)
+try:
+    torch.set_grad_enabled(False)
+except Exception:
+    pass
 
 def extract_exif_gps(image_path):
     """
@@ -133,6 +146,11 @@ def load_ai_model():
         print("⚠️ models/best.pt not found yet. Loading base YOLOv8n model...")
         model = YOLO("yolov8n.pt")
         model_source = "Base YOLOv8 (Pending best.pt download)"
+    try:
+        model.to("cpu")
+    except Exception:
+        pass
+    gc.collect()
 
 load_ai_model()
 
@@ -290,12 +308,22 @@ def detect_damage():
     
     img_h, img_w = img.shape[:2]
 
+    # Downscale image if larger than 1024px to prevent RAM spikes on cloud free tiers
+    max_dim = 1024
+    if max(img_h, img_w) > max_dim:
+        scale = max_dim / float(max(img_h, img_w))
+        new_w = int(img_w * scale)
+        new_h = int(img_h * scale)
+        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        img_h, img_w = new_h, new_w
+
     # Run inference
     global model
     if model is None:
         load_ai_model()
 
-    results = model(img, conf=0.25)
+    with torch.no_grad():
+        results = model.predict(img, conf=0.25, imgsz=480, device="cpu", verbose=False)
     
     detections = []
     annotated_img = img.copy()
@@ -327,6 +355,12 @@ def detect_damage():
 
     # Save annotated image
     cv2.imwrite(str(annotated_path), annotated_img)
+
+    # Clean up large OpenCV & PyTorch buffers immediately
+    del annotated_img
+    del img
+    del results
+    gc.collect()
 
     # Compute Priority & Severity
     priority, severity_score, dominant_class = compute_priority_and_severity(detections, img_w, img_h)
@@ -537,8 +571,9 @@ if __name__ == "__main__":
     print(f"👉 Mobile Camera Interface:  {mobile_url}")
     print(f"=======================================================\n")
 
+    debug_mode = os.environ.get("FLASK_DEBUG") == "1"
     if use_https:
         cert_p, key_p = ensure_ssl_certs()
-        app.run(host="0.0.0.0", port=port, ssl_context=(cert_p, key_p), debug=not is_cloud)
+        app.run(host="0.0.0.0", port=port, ssl_context=(cert_p, key_p), debug=debug_mode, use_reloader=False)
     else:
-        app.run(host="0.0.0.0", port=port, debug=not is_cloud)
+        app.run(host="0.0.0.0", port=port, debug=debug_mode, use_reloader=False)
