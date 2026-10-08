@@ -1,0 +1,29 @@
+# Binaries
+cloudflared.exe
+*.exe
+
+# Python Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Temporary upload files
+server/uploads/raw_*.jpg
+server/uploads/annotated_*.jpg
+
+# Local Dev Certs & Database
+server/cert.pem
+server/key.pem
+*.db
+
+# Local IDE
+.idea/
+.vscode/

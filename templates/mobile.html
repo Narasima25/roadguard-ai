@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>RoadGuard — Mobile AI Road Inspector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #030712;
+      --surface: #0b1120;
+      --surface-elevated: #111b2e;
+      --surface-border: #1e293b;
+      --primary: #3b82f6;
+      --primary-glow: rgba(59, 130, 246, 0.35);
+      --accent: #06b6d4;
+      --critical: #ef4444;
+      --high: #f97316;
+      --medium: #eab308;
+      --low: #22c55e;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      padding-bottom: calc(65px + env(safe-area-inset-bottom, 10px));
+    }
+
+    /* === Top Glass Header === */
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: rgba(11, 17, 32, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #2563eb, #06b6d4);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    .brand-text h1 {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      background: linear-gradient(135deg, #ffffff, #93c5fd);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-text p {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 500;
+      letter-spacing: 0.2px;
+    }
+
+    .header-status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: #4ade80;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .header-status-pill.searching {
+      background: rgba(234, 179, 8, 0.12);
+      border-color: rgba(234, 179, 8, 0.3);
+      color: #facc15;
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+      animation: radarPulse 1.5s infinite;
+    }
+    @keyframes radarPulse { 0%{opacity:1; transform:scale(1)} 50%{opacity:0.4; transform:scale(1.2)} 100%{opacity:1; transform:scale(1)} }
+
+    /* === Telemetry HUD Bar === */
+    .telemetry-strip {
+      background: #070c18;
+      border-bottom: 1px solid var(--surface-border);
+      padding: 8px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .geo-coord {
+      font-family: 'JetBrains Mono', monospace;
+      color: #38bdf8;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .geo-road-name {
+      font-size: 11px;
+      color: #e2e8f0;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 50%;
+    }
+
+    /* === View Navigation Tabs (Bottom Navigation Bar) === */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: calc(60px + env(safe-area-inset-bottom, 10px));
+      padding-bottom: env(safe-area-inset-bottom, 10px);
+      background: rgba(11, 17, 32, 0.94);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid var(--surface-border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 1100;
+    }
+
+    .nav-tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px 14px;
+      border-radius: 12px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .nav-tab:active { transform: scale(0.92); }
+    .nav-tab.active {
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .nav-tab-icon { font-size: 18px; }
+
+    /* === Tab Views Container === */
+    .tab-content { display: none; flex: 1; flex-direction: column; }
+    .tab-content.active { display: flex; animation: viewFade 0.25s ease-out; }
+    @keyframes viewFade { from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)} }
+
+    /* =======================================================
+       TAB 1: CAMERA SCANNER VIEW
+       ======================================================= */
+    .viewfinder-wrapper {
+      position: relative;
+      background: #000;
+      width: 100%;
+      height: 48vh;
+      min-height: 280px;
+      max-height: 440px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #camera-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    /* High-Tech HUD Reticle Overlay */
+    .hud-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px;
+    }
+
+    .hud-top-meta {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.7);
+      background: rgba(0, 0, 0, 0.4);
+      padding: 4px 8px;
+      border-radius: 6px;
+      backdrop-filter: blur(4px);
+    }
+
+    .hud-target-box {
+      align-self: center;
+      width: 72%;
+      max-width: 300px;
+      height: 55%;
+      border: 1px dashed rgba(56, 189, 248, 0.4);
+      border-radius: 14px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Brackets */
+    .corner-bracket {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-color: #38bdf8;
+      border-style: solid;
+    }
+    .bracket-tl { top: -2px; left: -2px; border-width: 3px 0 0 3px; border-top-left-radius: 6px; }
+    .bracket-tr { top: -2px; right: -2px; border-width: 3px 3px 0 0; border-top-right-radius: 6px; }
+    .bracket-bl { bottom: -2px; left: -2px; border-width: 0 0 3px 3px; border-bottom-left-radius: 6px; }
+    .bracket-br { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; border-bottom-right-radius: 6px; }
+
+    .crosshair-center {
+      width: 12px;
+      height: 12px;
+      position: relative;
+    }
+    .crosshair-center::before, .crosshair-center::after {
+      content: '';
+      position: absolute;
+      background: rgba(56, 189, 248, 0.7);
+    }
+    .crosshair-center::before { width: 100%; height: 2px; top: 5px; left: 0; }
+    .crosshair-center::after { width: 2px; height: 100%; top: 0; left: 5px; }
+
+    /* Laser Scanning Animation */
+    .scanline {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #38bdf8, transparent);
+      box-shadow: 0 0 12px #38bdf8;
+      animation: scanning 1.8s infinite ease-in-out;
+    }
+    @keyframes scanning {
+      0% { top: 0%; opacity: 0; }
+      20% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { top: 100%; opacity: 0; }
+    }
+
+    /* Fallback Splash in Viewfinder */
+    .viewfinder-splash {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      text-align: center;
+      padding: 24px;
+      cursor: pointer;
+    }
+    .splash-icon {
+      font-size: 52px;
+      filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.4));
+      animation: floatIcon 3s ease-in-out infinite;
+    }
+    @keyframes floatIcon { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+    /* Scanner Controls Deck */
+    .scanner-controls {
+      padding: 16px;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-top: 1px solid var(--surface-border);
+    }
+
+    .shutter-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .btn-shutter {
+      flex: 1;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      padding: 14px 18px;
+      font-size: 15px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+      transition: all 0.15s;
+    }
+    .btn-shutter:active { transform: scale(0.97); }
+
+    .btn-gallery-pick {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--surface-border);
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-gallery-pick:active { transform: scale(0.94); background: #1e293b; color: #fff; }
+
+    /* Quick GPS Chip Row */
+    .quick-chips-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .quick-chips-row::-webkit-scrollbar { display: none; }
+
+    .chip-btn {
+      background: var(--surface-elevated);
+      border: 1px solid var(--surface-border);
+      color: #94a3b8;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+    }
+    .chip-btn.active, .chip-btn:active {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: #3b82f6;
+      color: #93c5fd;
+    }
+
+    /* Image Preview & Upload Drawer */
+    .preview-card {
+      display: none;
+      background: var(--surface-elevated);
+      border: 1px solid var(--surface-border);
+      border-radius: 14px;
+      padding: 12px;
+      margin: 12px 16px;
+      animation: slideUp 0.3s ease;
+    }
+    .preview-img-box {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      max-height: 240px;
+      border: 1px solid var(--surface-border);
+    }
+    .preview-img-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .preview-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .btn-analyze {
+      flex: 2;
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 12px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+    }
+    .btn-retake {
+      flex: 1;
+      background: var(--surface);
+      color: #f87171;
+      border: 1px solid var(--surface-border);
+      border-radius: 10px;
+      padding: 12px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    /* Result Card Modal / Drawer */
+    .result-sheet {
+      display: none;
+      background: var(--surface-elevated);
+      border: 1px solid var(--surface-border);
+      border-radius: 16px;
+      padding: 16px;
+      margin: 12px 16px 20px 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideUp { from{transform:translateY(25px); opacity:0} to{transform:translateY(0); opacity:1} }
+
+    .result-sheet-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .damage-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #f8fafc;
+      letter-spacing: -0.3px;
+    }
+
+    .priority-badge-lg {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .p-critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
+    .p-high { background: rgba(249, 115, 22, 0.2); color: #f97316; border: 1px solid #f97316; }
+    .p-medium { background: rgba(234, 179, 8, 0.2); color: #eab308; border: 1px solid #eab308; }
+    .p-low { background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid #22c55e; }
+
+    /* Severity Bar */
+    .severity-meter-box {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .severity-meter-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .severity-score-val {
+      font-size: 16px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .severity-bar-bg {
+      flex: 1;
+      height: 6px;
+      background: #1e293b;
+      border-radius: 4px;
+      margin: 0 12px;
+      overflow: hidden;
+    }
+    .severity-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #eab308, #ef4444);
+      transition: width 0.6s ease;
+    }
+
+    .annotated-result-img {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--surface-border);
+      margin-bottom: 12px;
+    }
+
+    .geo-meta-card {
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+    .geo-meta-card strong { color: #f1f5f9; }
+
+    .result-sheet-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .btn-sheet-action {
+      flex: 1;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      border: 1px solid var(--surface-border);
+      background: var(--surface);
+      color: #e2e8f0;
+    }
+    .btn-sheet-action.primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
+
+    /* =======================================================
+       TAB 2: GIS FULLSCREEN ROAD MAP VIEW
+       ======================================================= */
+    .map-tab-container {
+      position: relative;
+      flex: 1;
+      height: calc(100vh - 120px);
+      width: 100%;
+    }
+
+    #gis-fullmap {
+      width: 100%;
+      height: 100%;
+      background: #090f20;
+    }
+
+    /* Map Floating Controls */
+    .map-fab-stack {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 800;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .map-fab {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--surface-border);
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .map-fab:active { transform: scale(0.92); background: #1e293b; }
+
+    .map-bottom-drawer {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      right: 12px;
+      z-index: 800;
+      background: rgba(11, 17, 32, 0.92);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--surface-border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    /* =======================================================
+       TAB 3: INCIDENT LOG FEED
+       ======================================================= */
+    .feed-tab-container {
+      padding: 14px 16px;
+      flex: 1;
+    }
+
+    .feed-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .feed-title { font-size: 16px; font-weight: 800; }
+
+    .feed-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .incident-item {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .incident-item:active { transform: scale(0.98); background: #131d33; }
+
+    .incident-thumb {
+      width: 60px;
+      height: 60px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: #1e293b;
+      border: 1px solid var(--surface-border);
+    }
+
+    .incident-details {
+      flex: 1;
+      min-width: 0;
+    }
+    .incident-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .incident-name {
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .incident-road {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+    .incident-sub {
+      font-size: 10px;
+      color: #64748b;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* === Toast Notification Component === */
+    .toast-box {
+      position: fixed;
+      top: 65px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #38bdf8;
+      color: #f8fafc;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .toast-box.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="brand-wrap">
+      <div class="brand-logo-icon">🛡️</div>
+      <div class="brand-text">
+        <h1>RoadGuard</h1>
+        <p>AI Road & Pothole Inspector</p>
+      </div>
+    </div>
+    <div class="header-status-pill" id="header-gps-pill">
+      <span class="pulse-dot"></span>
+      <span id="gps-pill-text">GPS READY</span>
+    </div>
+  </header>
+
+  <!-- Live Telemetry Strip -->
+  <section class="telemetry-strip">
+    <div class="geo-coord">
+      <span>📍</span>
+      <span id="live-coords">12.97160° N, 77.59460° E</span>
+    </div>
+    <div class="geo-road-name" id="live-road-name">
+      Bangalore, Karnataka
+    </div>
+  </section>
+
+  <!-- Toast Floating Alert -->
+  <div class="toast-box" id="toast-box">
+    <span id="toast-icon">✨</span>
+    <span id="toast-msg">Ready</span>
+  </div>
+
+  <!-- Hidden native camera input (instant backend capture) -->
+  <input type="file" id="file-capture" accept="image/*" capture="environment" onchange="onFilePicked(event)" style="display:none;">
+
+  <!-- ==========================================
+       TAB 1: CAMERA & DETECTOR SCANNER VIEW
+       ========================================== -->
+  <div class="tab-content active" id="tab-scanner">
+    
+    <!-- Viewfinder Area -->
+    <div class="viewfinder-wrapper">
+      <video id="camera-video" autoplay playsinline></video>
+      <canvas id="camera-canvas" style="display:none;"></canvas>
+
+      <!-- Laser Scanner Animation Overlay -->
+      <div class="scanline" id="scanline"></div>
+
+      <!-- High-Tech HUD Viewfinder Graphic -->
+      <div class="hud-overlay">
+        <div class="hud-top-meta">
+          <span>YOLOv8 MODEL: INDIAN ROAD DAMAGE</span>
+          <span id="hud-accuracy-disp">ACC: ±3m</span>
+        </div>
+
+        <div class="hud-target-box">
+          <div class="corner-bracket bracket-tl"></div>
+          <div class="corner-bracket bracket-tr"></div>
+          <div class="corner-bracket bracket-bl"></div>
+          <div class="corner-bracket bracket-br"></div>
+          <div class="crosshair-center"></div>
+        </div>
+
+        <div class="hud-top-meta" style="justify-content:center; gap: 12px;">
+          <span>TARGET: POTHOLE / SEWER / CRACK</span>
+        </div>
+      </div>
+
+      <!-- Fallback Tap-to-Snap Splash (if live stream idle) -->
+      <div class="viewfinder-splash" id="viewfinder-splash" onclick="triggerCameraCapture()">
+        <span class="splash-icon">📸</span>
+        <p style="font-weight: 800; font-size: 16px; color: #f8fafc;">Tap to Launch Camera</p>
+        <p style="font-size: 12px; color: #94a3b8; max-width: 260px;">
+          Opens full-resolution phone camera with native auto-focus and zoom.
+        </p>
+      </div>
+    </div>
+
+    <!-- Scanner Bottom Controls -->
+    <div class="scanner-controls">
+      
+      <!-- Primary Shutter Button -->
+      <div class="shutter-row">
+        <button class="btn-gallery-pick" onclick="triggerCameraCapture()" title="Open Camera / Gallery">
+          📁
+        </button>
+        <button class="btn-shutter" onclick="triggerCameraCapture()">
+          📸 Snap Road Damage
+        </button>
+      </div>
+
+      <!-- Quick Location Jumpers -->
+      <div class="quick-chips-row">
+        <button class="chip-btn active" onclick="requestSatelliteGPS()">
+          🛰️ My Live GPS
+        </button>
+        <button class="chip-btn" onclick="jumpLocation('BANGALORE')">Bangalore</button>
+        <button class="chip-btn" onclick="jumpLocation('DELHI')">Delhi</button>
+        <button class="chip-btn" onclick="jumpLocation('MUMBAI')">Mumbai</button>
+        <button class="chip-btn" onclick="jumpLocation('HYDERABAD')">Hyderabad</button>
+        <button class="chip-btn" onclick="jumpLocation('CHENNAI')">Chennai</button>
+        <button class="chip-btn" onclick="jumpLocation('PUNE')">Pune</button>
+      </div>
+    </div>
+
+    <!-- Photo Preview Drawer (Before Detection) -->
+    <div class="preview-card" id="preview-card">
+      <div class="preview-img-box">
+        <img id="preview-img" src="" alt="Captured road sample">
+      </div>
+      <div class="preview-actions">
+        <button class="btn-retake" onclick="resetPreview()">✕ Retake</button>
+        <button class="btn-analyze" id="analyze-btn" onclick="uploadAndRunInference()">
+          🧠 Run AI Inspection
+        </button>
+      </div>
+    </div>
+
+    <!-- Results Bottom Sheet -->
+    <div class="result-sheet" id="result-sheet">
+      <div class="result-sheet-header">
+        <div>
+          <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Detection Result</span>
+          <div class="damage-title" id="res-damage-title">Pothole Detected</div>
+        </div>
+        <span class="priority-badge-lg p-critical" id="res-priority-badge">CRITICAL</span>
+      </div>
+
+      <!-- Severity Bar -->
+      <div class="severity-meter-box">
+        <span class="severity-meter-label">Damage Severity Score</span>
+        <div class="severity-bar-bg">
+          <div class="severity-bar-fill" id="res-severity-fill" style="width: 80%;"></div>
+        </div>
+        <span class="severity-score-val" id="res-severity-score">8.5/10</span>
+      </div>
+
+      <!-- Annotated Bounding Box Image -->
+      <img id="res-annotated-img" class="annotated-result-img" src="" alt="AI Bounding Box Result">
+
+      <!-- Geolocation Details -->
+      <div class="geo-meta-card">
+        <div>📍 <strong>Location:</strong> <span id="res-coords">--</span></div>
+        <div>🛣️ <strong>Road / Area:</strong> <span id="res-road">--</span></div>
+        <div>🎯 <strong>Confidence:</strong> <span id="res-conf">--</span> | <strong>Objects:</strong> <span id="res-count">--</span></div>
+        <div>🛰️ <strong>Source:</strong> <span id="res-source" style="color:#38bdf8;">--</span></div>
+      </div>
+
+      <div class="result-sheet-actions">
+        <button class="btn-sheet-action primary" onclick="switchTab('map')">
+          🗺️ View on GIS Map
+        </button>
+        <button class="btn-sheet-action" onclick="resetAndScanAgain()">
+          📷 Scan Next
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==========================================
+       TAB 2: FULLSCREEN GIS ROAD MAP VIEW
+       ========================================== -->
+  <div class="tab-content" id="tab-map">
+    <div class="map-tab-container">
+      <div id="gis-fullmap"></div>
+
+      <!-- Map Floating Action Buttons -->
+      <div class="map-fab-stack">
+        <button class="map-fab" onclick="requestSatelliteGPS()" title="Lock My GPS">🎯</button>
+        <button class="map-fab" onclick="refreshMapIncidents()" title="Reload Pins">🔄</button>
+        <button class="map-fab" onclick="toggleMapTiles()" title="Toggle Satellite/Street">🛰️</button>
+      </div>
+
+      <!-- Map Pinpoint Info Drawer -->
+      <div class="map-bottom-drawer">
+        <div>
+          <span style="font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Selected Map Pin</span>
+          <div id="drawer-pin-road" style="font-size: 13px; font-weight: 700; color: #f8fafc; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            Tap anywhere to pin
+          </div>
+          <div id="drawer-pin-coords" style="font-size: 11px; font-family: 'JetBrains Mono', monospace; color: #38bdf8;">
+            12.97160° N, 77.59460° E
+          </div>
+        </div>
+        <button class="chip-btn active" onclick="switchTab('scanner'); triggerCameraCapture();" style="padding: 8px 12px;">
+          📸 Inspect Here
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       TAB 3: INCIDENT LOG FEED
+       ========================================== -->
+  <div class="tab-content" id="tab-feed">
+    <div class="feed-tab-container">
+      <div class="feed-header-bar">
+        <div class="feed-title">📋 Logged Road Incidents</div>
+        <button class="chip-btn" onclick="fetchRecentIncidents()">🔄 Refresh</button>
+      </div>
+
+      <!-- Filter Chips -->
+      <div class="quick-chips-row" style="margin-bottom: 12px;">
+        <button class="chip-btn active" onclick="filterFeed('ALL')">All</button>
+        <button class="chip-btn" onclick="filterFeed('CRITICAL')">🔴 Critical</button>
+        <button class="chip-btn" onclick="filterFeed('HIGH')">🟠 High</button>
+        <button class="chip-btn" onclick="filterFeed('MEDIUM')">🟡 Medium</button>
+        <button class="chip-btn" onclick="filterFeed('LOW')">🟢 Low</button>
+      </div>
+
+      <div class="feed-list" id="feed-list-container">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom App Tab Navigation -->
+  <nav class="bottom-nav">
+    <div class="nav-tab active" id="nav-btn-scanner" onclick="switchTab('scanner')">
+      <span class="nav-tab-icon">📷</span>
+      <span>Scanner</span>
+    </div>
+    <div class="nav-tab" id="nav-btn-map" onclick="switchTab('map')">
+      <span class="nav-tab-icon">🗺️</span>
+      <span>GIS Map</span>
+    </div>
+    <div class="nav-tab" id="nav-btn-feed" onclick="switchTab('feed')">
+      <span class="nav-tab-icon">📋</span>
+      <span>Reports</span>
+    </div>
+  </nav>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // State Variables
+    let currentLat = 12.9716;
+    let currentLon = 77.5946;
+    let currentAccuracy = 0;
+    let currentAddress = "Bangalore, Karnataka";
+    let locationSource = "Auto GPS";
+    let selectedFile = null;
+    let map = null;
+    let mapMarker = null;
+    let accuracyCircle = null;
+    let incidentsLayer = L.layerGroup();
+    let isSatelliteMode = false;
+    let streetTileLayer = null;
+    let satelliteTileLayer = null;
+    let allIncidents = [];
+    let currentFilter = 'ALL';
+
+    const CITIES = {
+      'BANGALORE': { lat: 12.9716, lon: 77.5946, name: 'Bangalore, Karnataka' },
+      'DELHI': { lat: 28.6139, lon: 77.2090, name: 'New Delhi, Delhi' },
+      'MUMBAI': { lat: 19.0760, lon: 72.8777, name: 'Mumbai, Maharashtra' },
+      'HYDERABAD': { lat: 17.3850, lon: 78.4867, name: 'Hyderabad, Telangana' },
+      'CHENNAI': { lat: 13.0827, lon: 80.2707, name: 'Chennai, Tamil Nadu' },
+      'PUNE': { lat: 18.5204, lon: 73.8567, name: 'Pune, Maharashtra' }
+    };
+
+    // 1. Tab Switching
+    function switchTab(tabId) {
+      triggerHaptic();
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+
+      const targetView = document.getElementById(`tab-${tabId}`);
+      const targetNav = document.getElementById(`nav-btn-${tabId}`);
+
+      if (targetView) targetView.classList.add('active');
+      if (targetNav) targetNav.classList.add('active');
+
+      if (tabId === 'map') {
+        if (!map) initGISMap();
+        setTimeout(() => { map.invalidateSize(); }, 200);
+      } else if (tabId === 'feed') {
+        fetchRecentIncidents();
+      }
+    }
+
+    // 2. GIS Map Initialization
+    function initGISMap() {
+      map = L.map('gis-fullmap', {
+        zoomControl: false,
+        attributionControl: false
+      }).setView([currentLat, currentLon], 16);
+
+      streetTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+      satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+
+      streetTileLayer.addTo(map);
+      incidentsLayer.addTo(map);
+
+      // Pin Icon
+      const pinIcon = L.divIcon({
+        className: 'custom-map-pin',
+        html: `<div style="background:#ef4444; width:18px; height:18px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 12px rgba(239,68,68,0.8);"></div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+
+      mapMarker = L.marker([currentLat, currentLon], { draggable: true, icon: pinIcon }).addTo(map);
+
+      mapMarker.on('dragend', function (e) {
+        const pt = e.target.getLatLng();
+        updateLocationState(pt.lat, pt.lng, 0, 'Interactive Map Pin');
+      });
+
+      map.on('click', function (e) {
+        updateLocationState(e.latlng.lat, e.latlng.lng, 0, 'Interactive Map Pin');
+      });
+
+      refreshMapIncidents();
+    }
+
+    function toggleMapTiles() {
+      triggerHaptic();
+      if (!map) return;
+      if (isSatelliteMode) {
+        map.removeLayer(satelliteTileLayer);
+        streetTileLayer.addTo(map);
+        isSatelliteMode = false;
+        showToast('🗺️ Switched to Street Map');
+      } else {
+        map.removeLayer(streetTileLayer);
+        satelliteTileLayer.addTo(map);
+        isSatelliteMode = true;
+        showToast('🛰️ Switched to Satellite View');
+      }
+    }
+
+    async function refreshMapIncidents() {
+      try {
+        const res = await fetch('/api/reports?priority=ALL');
+        const data = await res.json();
+        incidentsLayer.clearLayers();
+
+        const prioColors = {
+          'CRITICAL': '#ef4444',
+          'HIGH': '#f97316',
+          'MEDIUM': '#eab308',
+          'LOW': '#22c55e'
+        };
+
+        data.forEach(inc => {
+          if (inc.latitude && inc.longitude) {
+            const color = prioColors[inc.priority] || '#3b82f6';
+            const circle = L.circleMarker([inc.latitude, inc.longitude], {
+              radius: 8,
+              fillColor: color,
+              color: '#ffffff',
+              weight: 2,
+              fillOpacity: 0.85
+            }).bindPopup(`
+              <div style="font-family:'Inter',sans-serif; color:#0f172a;">
+                <b>${inc.damage_type || 'Road Damage'}</b><br>
+                Priority: <b style="color:${color};">${inc.priority}</b><br>
+                <small>${inc.address || ''}</small>
+              </div>
+            `);
+            incidentsLayer.addLayer(circle);
+          }
+        });
+      } catch (err) {
+        console.warn('Map points fetch error:', err);
+      }
+    }
+
+    // 3. Location State Management
+    function updateLocationState(lat, lon, acc, source) {
+      currentLat = Number(lat.toFixed(6));
+      currentLon = Number(lon.toFixed(6));
+      currentAccuracy = acc;
+      locationSource = source;
+
+      if (mapMarker) mapMarker.setLatLng([currentLat, currentLon]);
+
+      if (accuracyCircle && map) {
+        map.removeLayer(accuracyCircle);
+        accuracyCircle = null;
+      }
+      if (acc > 0 && map) {
+        accuracyCircle = L.circle([currentLat, currentLon], {
+          radius: acc,
+          color: '#38bdf8',
+          fillColor: '#38bdf8',
+          fillOpacity: 0.15,
+          weight: 1
+        }).addTo(map);
+      }
+
+      document.getElementById('live-coords').innerText = `${currentLat.toFixed(5)}° N, ${currentLon.toFixed(5)}° E`;
+      document.getElementById('drawer-pin-coords').innerText = `${currentLat.toFixed(5)}° N, ${currentLon.toFixed(5)}° E`;
+      document.getElementById('hud-accuracy-disp').innerText = acc > 0 ? `ACC: ±${Math.round(acc)}m` : `PINPOINT`;
+
+      const pill = document.getElementById('header-gps-pill');
+      const pillText = document.getElementById('gps-pill-text');
+
+      if (source.includes('Satellite') || source.includes('Hardware')) {
+        pill.className = 'header-status-pill';
+        pillText.innerText = `GPS ±${Math.round(acc)}m`;
+      } else {
+        pill.className = 'header-status-pill searching';
+        pillText.innerText = `PINNED`;
+      }
+
+      reverseGeocode(currentLat, currentLon);
+    }
+
+    // 4. Request Hardware Satellite GPS
+    function requestSatelliteGPS() {
+      triggerHaptic();
+      if (!('geolocation' in navigator)) {
+        showToast('⚠️ Geolocation not supported');
+        return;
+      }
+
+      showToast('🛰️ Locking Satellite GPS...');
+      const pill = document.getElementById('header-gps-pill');
+      const pillText = document.getElementById('gps-pill-text');
+      pill.className = 'header-status-pill searching';
+      pillText.innerText = 'LOCKING...';
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const acc = pos.coords.accuracy || 3;
+          updateLocationState(lat, lon, acc, 'Hardware Satellite GPS');
+          if (map) map.flyTo([lat, lon], 17);
+          showToast(`✅ GPS Locked (±${Math.round(acc)}m Accuracy)`);
+        },
+        (err) => {
+          console.warn('Geolocation error:', err.message);
+          pill.className = 'header-status-pill searching';
+          pillText.innerText = 'PINPOINT';
+
+          if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+            alert(
+              "📱 Mobile Browser Security Note:\n\n" +
+              "To unlock 100% continuous hardware satellite GPS on phone:\n" +
+              "1. Run server with HTTPS: python run.py --https\n" +
+              "2. Or tap anywhere on the GIS map to pinpoint your location\n" +
+              "3. Photo camera EXIF GPS is automatically detected!"
+            );
+          } else {
+            showToast('⚠️ GPS error: check permissions');
+          }
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    }
+
+    // 5. Jump City Preset
+    function jumpLocation(cityKey) {
+      triggerHaptic();
+      if (CITIES[cityKey]) {
+        const c = CITIES[cityKey];
+        updateLocationState(c.lat, c.lon, 0, `City: ${c.name.split(',')[0]}`);
+        if (map) map.flyTo([c.lat, c.lon], 16);
+        showToast(`📍 Jumped to ${c.name.split(',')[0]}`);
+      }
+    }
+
+    // 6. Reverse Geocode via OpenStreetMap
+    let reverseGeocodeTimer = null;
+    function reverseGeocode(lat, lon) {
+      clearTimeout(reverseGeocodeTimer);
+      reverseGeocodeTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`);
+          const data = await res.json();
+          if (data && data.display_name) {
+            const addr = data.address || {};
+            const road = addr.road || addr.suburb || addr.neighbourhood || addr.city || '';
+            const city = addr.city || addr.town || addr.state_district || '';
+            currentAddress = road ? `${road}, ${city}` : data.display_name.split(',').slice(0, 3).join(',');
+            document.getElementById('live-road-name').innerText = currentAddress;
+            document.getElementById('drawer-pin-road').innerText = currentAddress;
+          }
+        } catch (e) {
+          document.getElementById('live-road-name').innerText = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+        }
+      }, 400);
+    }
+
+    // 7. Camera Trigger & File Handling
+    function triggerCameraCapture() {
+      triggerHaptic();
+      document.getElementById('file-capture').click();
+    }
+
+    function onFilePicked(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      selectedFile = file;
+
+      const previewUrl = URL.createObjectURL(file);
+      document.getElementById('preview-img').src = previewUrl;
+      document.getElementById('preview-card').style.display = 'block';
+      document.getElementById('result-sheet').style.display = 'none';
+      document.getElementById('preview-card').scrollIntoView({ behavior: 'smooth' });
+      showToast('📷 Photo captured. Tap Run AI Inspection.');
+    }
+
+    function resetPreview() {
+      triggerHaptic();
+      document.getElementById('preview-card').style.display = 'none';
+      document.getElementById('file-capture').value = '';
+      selectedFile = null;
+    }
+
+    // 8. Upload & Run AI Inference
+    async function uploadAndRunInference() {
+      if (!selectedFile) return;
+      triggerHaptic();
+
+      const btn = document.getElementById('analyze-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading-spinner"></span> YOLOv8 Processing...';
+      document.getElementById('scanline').style.display = 'block';
+
+      const formData = new FormData();
+      formData.append('image', selectedFile);
+      formData.append('latitude', currentLat);
+      formData.append('longitude', currentLon);
+      formData.append('accuracy', currentAccuracy);
+      formData.append('address', currentAddress);
+      formData.append('source', locationSource);
+
+      try {
+        const res = await fetch('/api/detect', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (data.success) {
+          if (data.location_source && data.location_source.includes('EXIF')) {
+            updateLocationState(data.latitude, data.longitude, 5, 'Photo EXIF GPS');
+          }
+          displayResult(data);
+          showToast(`✅ ${data.damage_type} detected (${data.priority})`);
+          if (map) refreshMapIncidents();
+        } else {
+          alert('Detection failed: ' + (data.error || 'Server error'));
+        }
+      } catch (err) {
+        alert('Server connection failed. Is the server running?');
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🧠 Run AI Inspection';
+        document.getElementById('scanline').style.display = 'none';
+      }
+    }
+
+    function displayResult(data) {
+      const sheet = document.getElementById('result-sheet');
+      document.getElementById('res-damage-title').innerText = `${data.damage_type} (${data.detected_count} found)`;
+
+      const badge = document.getElementById('res-priority-badge');
+      badge.innerText = data.priority;
+      badge.className = `priority-badge-lg p-${data.priority.toLowerCase()}`;
+
+      // Severity bar
+      const score = data.severity_score || 5;
+      document.getElementById('res-severity-score').innerText = `${score}/10`;
+      document.getElementById('res-severity-fill').style.width = `${score * 10}%`;
+
+      document.getElementById('res-annotated-img').src = data.annotated_url;
+      document.getElementById('res-coords').innerText = `${data.latitude.toFixed(5)}° N, ${data.longitude.toFixed(5)}° E`;
+      document.getElementById('res-road').innerText = data.address || currentAddress;
+      document.getElementById('res-conf').innerText = `${Math.round(data.confidence * 100)}%`;
+      document.getElementById('res-count').innerText = `${data.detected_count} bounding boxes`;
+      document.getElementById('res-source').innerText = data.location_source || 'Live Sensor';
+
+      sheet.style.display = 'block';
+      document.getElementById('preview-card').style.display = 'none';
+      sheet.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function resetAndScanAgain() {
+      triggerHaptic();
+      document.getElementById('result-sheet').style.display = 'none';
+      resetPreview();
+      triggerCameraCapture();
+    }
+
+    // 9. Incident Log Feed Fetcher
+    async function fetchRecentIncidents() {
+      const container = document.getElementById('feed-list-container');
+      container.innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8;">Loading reports...</div>';
+
+      try {
+        const res = await fetch(`/api/reports?priority=${currentFilter}`);
+        const reports = await res.json();
+        allIncidents = reports;
+
+        if (reports.length === 0) {
+          container.innerHTML = '<div style="text-align:center; padding:30px; color:#94a3b8;">No incidents recorded yet. Take a photo to log one!</div>';
+          return;
+        }
+
+        container.innerHTML = reports.map(r => `
+          <div class="incident-item" onclick="openIncidentOnMap(${r.latitude}, ${r.longitude})">
+            <img class="incident-thumb" src="/uploads/${r.annotated_filename || r.image_filename}" onerror="this.src='https://placehold.co/100x100/1e293b/fff?text=Damage'" alt="thumb">
+            <div class="incident-details">
+              <div class="incident-top">
+                <span class="incident-name">${r.damage_type}</span>
+                <span class="priority-badge-lg p-${r.priority.toLowerCase()}" style="font-size:9px; padding:2px 6px;">${r.priority}</span>
+              </div>
+              <div class="incident-road">📍 ${r.address || 'Road segment'}</div>
+              <div class="incident-sub">${new Date(r.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} | Score: ${r.severity_score}/10</div>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:#f87171;">Failed to load feed</div>';
+      }
+    }
+
+    function filterFeed(filter) {
+      triggerHaptic();
+      currentFilter = filter;
+      document.querySelectorAll('#tab-feed .chip-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      fetchRecentIncidents();
+    }
+
+    function openIncidentOnMap(lat, lon) {
+      triggerHaptic();
+      switchTab('map');
+      if (map) {
+        map.flyTo([lat, lon], 17);
+        updateLocationState(lat, lon, 0, 'Incident Selection');
+      }
+    }
+
+    // 10. Toast Notification Helper
+    let toastTimeout = null;
+    function showToast(msg) {
+      const box = document.getElementById('toast-box');
+      document.getElementById('toast-msg').innerText = msg;
+      box.classList.add('show');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => { box.classList.remove('show'); }, 3000);
+    }
+
+    // 11. Haptic Vibration Helper
+    function triggerHaptic() {
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate(15); } catch(e){}
+      }
+    }
+
+    // 12. Optional Live Video Stream in Secure Contexts
+    async function initLiveStreamIfSecure() {
+      if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
+          audio: false
+        });
+        const video = document.getElementById('camera-video');
+        video.srcObject = stream;
+        video.style.display = 'block';
+        document.getElementById('viewfinder-splash').style.display = 'none';
+      } catch (e) {
+        // Fallback splash remains active
+      }
+    }
+
+    window.onload = () => {
+      initLiveStreamIfSecure();
+      reverseGeocode(currentLat, currentLon);
+    };
+  </script>
+</body>
+</html>
