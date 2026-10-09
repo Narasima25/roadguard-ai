@@ -120,6 +120,23 @@ def extract_exif_gps(image_path):
 
 # Base paths
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Auto-load .env file if present
+env_file = BASE_DIR / ".env"
+if env_file.exists():
+    try:
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip('"').strip("'")
+                    if k and v:
+                        os.environ[k] = v
+    except Exception as e:
+        print(f"Note: .env reading exception: {e}")
+
 MODELS_DIR = BASE_DIR / "models"
 UPLOADS_DIR = BASE_DIR / "server" / "uploads"
 DB_PATH = BASE_DIR / "server" / "road_damage.db"
@@ -281,16 +298,26 @@ def compute_priority_and_severity(detections, img_width, img_height):
 
     return priority, score, dominant_class
 
+# Google Maps API Key configuration
+GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+
 # Routes
 @app.route("/")
 def dashboard_view():
     """Serves the Officer Portal Dashboard"""
-    return render_template("dashboard.html", model_source=model_source)
+    return render_template(
+        "dashboard.html",
+        model_source=model_source,
+        google_maps_api_key=GOOGLE_MAPS_API_KEY
+    )
 
 @app.route("/mobile")
 def mobile_view():
     """Serves the Mobile Camera & GPS capture interface"""
-    return render_template("mobile.html")
+    return render_template(
+        "mobile.html",
+        google_maps_api_key=GOOGLE_MAPS_API_KEY
+    )
 
 @app.route("/uploads/<path:filename>")
 def serve_upload(filename):

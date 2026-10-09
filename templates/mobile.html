@@ -1000,7 +1000,10 @@
 
       <div class="result-sheet-actions">
         <button class="btn-sheet-action primary" onclick="switchTab('map')">
-          🗺️ View on GIS Map
+          🗺️ View on Map
+        </button>
+        <button class="btn-sheet-action" onclick="openDirectGoogleMaps()" style="color:#38bdf8;">
+          🧭 Google Maps
         </button>
         <button class="btn-sheet-action" onclick="resetAndScanAgain()">
           📷 Scan Next
@@ -1043,6 +1046,7 @@
           </div>
         </div>
         <div style="display:flex; gap:6px;">
+          <button class="chip-btn" onclick="openDirectGoogleMaps()" style="padding: 8px 10px;" title="Navigate with Google Maps">🧭</button>
           <button class="chip-btn" onclick="openManualCoordModal()" style="padding: 8px 10px;" title="Edit Coordinates">✏️</button>
           <button class="chip-btn active" onclick="switchTab('scanner'); triggerCameraCapture();" style="padding: 8px 12px;">
             📸 Inspect Here
@@ -1145,13 +1149,23 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script>
     // State Variables
+    const SERVER_GMAPS_KEY = "{{ google_maps_api_key }}";
+    let activeGmapsKey = (new URLSearchParams(location.search).get('gkey') || localStorage.getItem('gmaps_api_key') || SERVER_GMAPS_KEY).trim();
+
     let currentLat = 12.9716;
     let currentLon = 77.5946;
     let currentAccuracy = 0;
     let currentAddress = "Bangalore, Karnataka";
     let locationSource = "Auto Locating...";
     let selectedFile = null;
+
+    let activeMapType = 'leaflet'; // 'google' | 'leaflet'
     let map = null;
+    let googleMobileMap = null;
+    let googleMobileMarker = null;
+    let googleAccuracyCircle = null;
+    let googleMobileMarkers = [];
+
     let mapMarker = null;
     let accuracyCircle = null;
     let incidentsLayer = L.layerGroup();
@@ -1162,6 +1176,12 @@
     let currentFilter = 'ALL';
     let watchId = null;
     let isTracking = false;
+
+    // Instant Google Maps Native Navigation
+    function openDirectGoogleMaps() {
+      triggerHaptic();
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${currentLat},${currentLon}`, '_blank');
+    }
 
     const CITIES = {
       'BANGALORE': { lat: 12.9716, lon: 77.5946, name: 'Bangalore, Karnataka' },
@@ -1185,31 +1205,107 @@
       if (targetNav) targetNav.classList.add('active');
 
       if (tabId === 'map') {
-        if (!map) initGISMap();
+        if (!map && !googleMobileMap) initGISMap();
         [50, 150, 300, 600].forEach(ms => {
-          setTimeout(() => { if (map) map.invalidateSize(); }, ms);
+          setTimeout(() => { 
+            if (map) map.invalidateSize();
+            if (googleMobileMap) google.maps.event.trigger(googleMobileMap, 'resize');
+          }, ms);
         });
         if (mapMarker) mapMarker.setLatLng([currentLat, currentLon]);
+        if (googleMobileMarker) googleMobileMarker.setPosition({ lat: currentLat, lng: currentLon });
       } else if (tabId === 'feed') {
         fetchRecentIncidents();
       }
     }
 
-    // 2. GIS Map Initialization
-    function initGISMap() {
+    // 2. GIS Map Initialization (Google Maps if key present, else Leaflet OSM)
+    async function initGISMap() {
+      if (map || googleMobileMap) return;
+
+      if (activeGmapsKey) {
+        try {
+          await loadGoogleMapsMobileApi(activeGmapsKey);
+          initGoogleMobileMap();
+          return;
+        } catch (e) {
+          console.warn('Google Maps mobile load failed, falling back to Leaflet:', e);
+        }
+      }
+      initLeafletGISMap();
+    }
+
+    function loadGoogleMapsMobileApi(key) {
+      return new Promise((resolve, reject) => {
+        window.initGoogleMapMobileCallback = () => resolve();
+        window.gm_authFailure = () => {
+          console.warn('Google Maps auth error on mobile. Using Leaflet.');
+          initLeafletGISMap();
+        };
+        const s = document.createElement('script');
+        s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places,geometry&callback=initGoogleMapMobileCallback`;
+        s.async = true;
+        s.defer = true;
+        s.onerror = () => reject(new Error('Failed to load Google Maps script'));
+        document.head.appendChild(s);
+      });
+    }
+
+    function initGoogleMobileMap() {
+      activeMapType = 'google';
+      const container = document.getElementById('gis-fullmap');
+      container.innerHTML = '';
+      googleMobileMap = new google.maps.Map(container, {
+        center: { lat: currentLat, lng: currentLon },
+        zoom: 16,
+        mapTypeId: google.maps.MapTypeId.ROADMAP,
+        disableDefaultUI: true,
+        zoomControl: false
+      });
+
+      googleMobileMarker = new google.maps.Marker({
+        position: { lat: currentLat, lng: currentLon },
+        map: googleMobileMap,
+        draggable: true,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: '#ef4444',
+          fillOpacity: 1,
+          scale: 10,
+          strokeColor: '#ffffff',
+          strokeWeight: 3
+        }
+      });
+
+      googleMobileMarker.addListener('dragend', (e) => {
+        updateLocationState(e.latLng.lat(), e.latLng.lng(), 0, 'Google Maps Pin');
+      });
+
+      googleMobileMap.addListener('click', (e) => {
+        updateLocationState(e.latLng.lat(), e.latLng.lng(), 0, 'Google Maps Pin');
+      });
+
+      refreshMapIncidents();
+    }
+
+    function initLeafletGISMap() {
+      activeMapType = 'leaflet';
+      const container = document.getElementById('gis-fullmap');
+      if (googleMobileMap) {
+        container.innerHTML = '';
+        googleMobileMap = null;
+      }
       if (map) return;
       map = L.map('gis-fullmap', {
         zoomControl: false,
         attributionControl: false
       }).setView([currentLat, currentLon], 16);
 
-      // Multi-subdomain street tiles for maximum throughput
       streetTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         subdomains: ['a', 'b', 'c']
       });
 
-      // Satellite tiles
       satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 19
       });
@@ -1217,7 +1313,6 @@
       streetTileLayer.addTo(map);
       incidentsLayer.addTo(map);
 
-      // Pin Icon
       const pinIcon = L.divIcon({
         className: 'custom-map-pin',
         html: `<div style="background:#ef4444; width:22px; height:22px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 15px rgba(239,68,68,0.9); display:flex; align-items:center; justify-content:center; color:#fff; font-size:10px;">📍</div>`,
@@ -1236,7 +1331,6 @@
         updateLocationState(e.latlng.lat, e.latlng.lng, 0, 'Interactive Map Pin');
       });
 
-      // Automatic resize listener
       if (window.ResizeObserver) {
         const ro = new ResizeObserver(() => {
           if (map) map.invalidateSize();
@@ -1249,6 +1343,18 @@
 
     function toggleMapTiles() {
       triggerHaptic();
+      if (activeMapType === 'google' && googleMobileMap) {
+        const currentType = googleMobileMap.getMapTypeId();
+        if (currentType === google.maps.MapTypeId.ROADMAP) {
+          googleMobileMap.setMapTypeId(google.maps.MapTypeId.HYBRID);
+          showToast('🛰️ Switched to Google Satellite');
+        } else {
+          googleMobileMap.setMapTypeId(google.maps.MapTypeId.ROADMAP);
+          showToast('🗺️ Switched to Google Street');
+        }
+        return;
+      }
+
       if (!map) return;
       if (isSatelliteMode) {
         map.removeLayer(satelliteTileLayer);
@@ -1267,8 +1373,6 @@
       try {
         const res = await fetch('/api/reports?priority=ALL');
         const data = await res.json();
-        incidentsLayer.clearLayers();
-
         const prioColors = {
           'CRITICAL': '#ef4444',
           'HIGH': '#f97316',
@@ -1276,25 +1380,55 @@
           'LOW': '#22c55e'
         };
 
-        data.forEach(inc => {
-          if (inc.latitude && inc.longitude) {
-            const color = prioColors[inc.priority] || '#3b82f6';
-            const circle = L.circleMarker([inc.latitude, inc.longitude], {
-              radius: 8,
-              fillColor: color,
-              color: '#ffffff',
-              weight: 2,
-              fillOpacity: 0.85
-            }).bindPopup(`
-              <div style="font-family:'Inter',sans-serif; color:#0f172a;">
-                <b>${inc.damage_type || 'Road Damage'}</b><br>
-                Priority: <b style="color:${color};">${inc.priority}</b><br>
-                <small>${inc.address || ''}</small>
-              </div>
-            `);
-            incidentsLayer.addLayer(circle);
-          }
-        });
+        if (activeMapType === 'google' && googleMobileMap) {
+          googleMobileMarkers.forEach(m => m.setMap(null));
+          googleMobileMarkers = [];
+          data.forEach(inc => {
+            if (inc.latitude && inc.longitude) {
+              const color = prioColors[inc.priority] || '#3b82f6';
+              const marker = new google.maps.Marker({
+                position: { lat: Number(inc.latitude), lng: Number(inc.longitude) },
+                map: googleMobileMap,
+                title: inc.damage_type,
+                icon: {
+                  path: google.maps.SymbolPath.CIRCLE,
+                  fillColor: color,
+                  fillOpacity: 0.9,
+                  scale: 7,
+                  strokeColor: '#ffffff',
+                  strokeWeight: 2
+                }
+              });
+              marker.addListener('click', () => {
+                showToast(`📍 ${inc.damage_type} (${inc.priority})`);
+              });
+              googleMobileMarkers.push(marker);
+            }
+          });
+        }
+
+        if (incidentsLayer) {
+          incidentsLayer.clearLayers();
+          data.forEach(inc => {
+            if (inc.latitude && inc.longitude) {
+              const color = prioColors[inc.priority] || '#3b82f6';
+              const circle = L.circleMarker([inc.latitude, inc.longitude], {
+                radius: 8,
+                fillColor: color,
+                color: '#ffffff',
+                weight: 2,
+                fillOpacity: 0.85
+              }).bindPopup(`
+                <div style="font-family:'Inter',sans-serif; color:#0f172a;">
+                  <b>${inc.damage_type || 'Road Damage'}</b><br>
+                  Priority: <b style="color:${color};">${inc.priority}</b><br>
+                  <small>${inc.address || ''}</small>
+                </div>
+              `);
+              incidentsLayer.addLayer(circle);
+            }
+          });
+        }
       } catch (err) {
         console.warn('Map points fetch error:', err);
       }
@@ -1308,6 +1442,7 @@
       locationSource = source;
 
       if (mapMarker) mapMarker.setLatLng([currentLat, currentLon]);
+      if (googleMobileMarker) googleMobileMarker.setPosition({ lat: currentLat, lng: currentLon });
 
       if (accuracyCircle && map) {
         map.removeLayer(accuracyCircle);
@@ -1321,6 +1456,20 @@
           fillOpacity: 0.15,
           weight: 1
         }).addTo(map);
+      }
+
+      if (googleAccuracyCircle) googleAccuracyCircle.setMap(null);
+      if (acc > 0 && googleMobileMap) {
+        googleAccuracyCircle = new google.maps.Circle({
+          strokeColor: '#38bdf8',
+          strokeOpacity: 0.8,
+          strokeWeight: 1,
+          fillColor: '#38bdf8',
+          fillOpacity: 0.15,
+          map: googleMobileMap,
+          center: { lat: currentLat, lng: currentLon },
+          radius: acc
+        });
       }
 
       document.getElementById('live-coords').innerText = `${currentLat.toFixed(5)}° N, ${currentLon.toFixed(5)}° E`;
@@ -1395,14 +1544,21 @@
       }
     }
 
+    function panActiveMobileMap(lat, lon, zoom = 17) {
+      if (activeMapType === 'google' && googleMobileMap) {
+        googleMobileMap.panTo({ lat: Number(lat), lng: Number(lon) });
+        googleMobileMap.setZoom(zoom);
+      } else if (map) {
+        map.flyTo([lat, lon], zoom, { animate: true, duration: 1.2 });
+      }
+    }
+
     function handlePositionSuccess(pos, sourceLabel) {
       const lat = pos.coords.latitude;
       const lon = pos.coords.longitude;
       const acc = pos.coords.accuracy || 5;
       updateLocationState(lat, lon, acc, sourceLabel);
-      if (map) {
-        map.flyTo([lat, lon], 17, { animate: true, duration: 1.2 });
-      }
+      panActiveMobileMap(lat, lon, 17);
       showToast(`✅ ${sourceLabel.includes('Satellite') ? 'GPS' : 'Location'} locked (±${Math.round(acc)}m)`);
     }
 
@@ -1412,9 +1568,7 @@
         const data = await res.json();
         if (data.latitude && data.longitude) {
           updateLocationState(data.latitude, data.longitude, 2500, `${data.source || 'IP Location'} (${data.city || ''})`);
-          if (map) {
-            map.flyTo([data.latitude, data.longitude], 15);
-          }
+          panActiveMobileMap(data.latitude, data.longitude, 15);
           showToast(`📍 Positioned near ${data.city || 'your area'}`);
         } else {
           showToast('⚠️ Tap map or enter coordinates');
@@ -1468,7 +1622,7 @@
       if (CITIES[cityKey]) {
         const c = CITIES[cityKey];
         updateLocationState(c.lat, c.lon, 0, `City: ${c.name.split(',')[0]}`);
-        if (map) map.flyTo([c.lat, c.lon], 16);
+        panActiveMobileMap(c.lat, c.lon, 16);
         showToast(`📍 Jumped to ${c.name.split(',')[0]}`);
       }
     }
@@ -1540,9 +1694,7 @@
       document.getElementById('map-search-input').value = name;
       document.getElementById('map-search-dropdown').style.display = 'none';
       updateLocationState(lat, lon, 0, `Searched: ${name}`);
-      if (map) {
-        map.flyTo([lat, lon], 17, { animate: true, duration: 1.2 });
-      }
+      panActiveMobileMap(lat, lon, 17);
       showToast(`📍 Pinned to ${name}`);
     }
 
@@ -1568,7 +1720,7 @@
       triggerHaptic();
       closeManualCoordModal();
       updateLocationState(lat, lon, 0, 'Manual Coordinate Entry');
-      if (map) map.flyTo([lat, lon], 17);
+      panActiveMobileMap(lat, lon, 17);
       showToast(`📍 Set to ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
     }
 
@@ -1749,10 +1901,8 @@
     function openIncidentOnMap(lat, lon) {
       triggerHaptic();
       switchTab('map');
-      if (map) {
-        map.flyTo([lat, lon], 17);
-        updateLocationState(lat, lon, 0, 'Incident Selection');
-      }
+      panActiveMobileMap(lat, lon, 17);
+      updateLocationState(lat, lon, 0, 'Incident Selection');
     }
 
     // 13. Toast Notification Helper

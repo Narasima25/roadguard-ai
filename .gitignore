@@ -27,3 +27,6 @@ server/key.pem
 # Local IDE
 .idea/
 .vscode/
+
+# Secrets
+.env
