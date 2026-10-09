@@ -21,6 +21,48 @@ try:
     torch.set_grad_enabled(False)
 except Exception:
     torch = None
+import requests
+
+# In-memory Geo Caches to prevent rate limiting
+_REVERSE_GEO_CACHE = {}
+_SEARCH_GEO_CACHE = {}
+_GEO_HEADERS = {
+    "User-Agent": "RoadGuardAI-DamageSurveillance/1.0 (https://render.com; contact: support@roadguard.ai)",
+    "Accept": "application/json"
+}
+
+def fetch_reverse_geocode(lat, lon):
+    try:
+        cache_key = f"{round(float(lat), 4)}_{round(float(lon), 4)}"
+        if cache_key in _REVERSE_GEO_CACHE:
+            return _REVERSE_GEO_CACHE[cache_key]
+
+        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=18&addressdetails=1"
+        resp = requests.get(url, headers=_GEO_HEADERS, timeout=4)
+        if resp.status_code == 200:
+            data = resp.json()
+            addr = data.get("address", {})
+            road = addr.get("road") or addr.get("pedestrian") or addr.get("suburb") or addr.get("neighbourhood") or ""
+            city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("state_district") or ""
+            state = addr.get("state", "")
+            
+            clean_addr = f"{road}, {city}".strip(", ") if road or city else data.get("display_name", f"{lat:.4f}, {lon:.4f}")
+            res = {
+                "success": True,
+                "address": clean_addr,
+                "road": road,
+                "city": city,
+                "state": state,
+                "display_name": data.get("display_name", "")
+            }
+            if len(_REVERSE_GEO_CACHE) > 500:
+                _REVERSE_GEO_CACHE.clear()
+            _REVERSE_GEO_CACHE[cache_key] = res
+            return res
+    except Exception as e:
+        print(f"Reverse geocode error: {e}")
+    return {"success": False, "address": f"{float(lat):.4f}, {float(lon):.4f}"}
+
 
 def extract_exif_gps(image_path):
     """
@@ -370,6 +412,12 @@ def detect_damage():
     
     avg_conf = round(float(np.mean([d["confidence"] for d in detections])), 2) if detections else 0.0
 
+    # Ensure address is populated via reverse geocode if empty
+    if not address_val or address_val.strip() in ("", "--"):
+        rev = fetch_reverse_geocode(lat_val, lon_val)
+        if rev.get("success"):
+            address_val = rev.get("address", "")
+
     # Save to SQLite Database
     now = datetime.now().isoformat()
     conn = get_db()
@@ -401,6 +449,113 @@ def detect_damage():
         "location_source": location_source,
         "annotated_url": f"/uploads/{annotated_filename}",
         "detections": detections
+    })
+
+# ========================================================
+# GEO SERVICES (Proxy endpoints to bypass Render CORS & 403)
+# ========================================================
+@app.route("/api/geo/reverse", methods=["GET"])
+def geo_reverse():
+    """Proxies reverse geocoding via Nominatim with valid headers & server cache"""
+    try:
+        lat = float(request.args.get("lat"))
+        lon = float(request.args.get("lon"))
+        res = fetch_reverse_geocode(lat, lon)
+        return jsonify(res)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid coordinates"}), 400
+
+@app.route("/api/geo/search", methods=["GET"])
+def geo_search():
+    """Search roads, landmarks, and cities worldwide"""
+    query = request.args.get("q", "").strip()
+    if not query or len(query) < 2:
+        return jsonify({"results": []})
+
+    if query in _SEARCH_GEO_CACHE:
+        return jsonify({"results": _SEARCH_GEO_CACHE[query]})
+
+    try:
+        url = f"https://nominatim.openstreetmap.org/search?format=json&q={requests.utils.quote(query)}&limit=6&addressdetails=1"
+        resp = requests.get(url, headers=_GEO_HEADERS, timeout=4)
+        if resp.status_code == 200:
+            data = resp.json()
+            results = []
+            for item in data:
+                addr = item.get("address", {})
+                road = addr.get("road") or addr.get("suburb") or addr.get("neighbourhood") or ""
+                city = addr.get("city") or addr.get("town") or addr.get("state_district") or ""
+                short_name = f"{road}, {city}".strip(", ") if road or city else item.get("display_name", "").split(",")[0]
+                results.append({
+                    "lat": float(item["lat"]),
+                    "lon": float(item["lon"]),
+                    "display_name": item.get("display_name", ""),
+                    "short_name": short_name,
+                    "type": item.get("type", "")
+                })
+            if len(_SEARCH_GEO_CACHE) > 200:
+                _SEARCH_GEO_CACHE.clear()
+            _SEARCH_GEO_CACHE[query] = results
+            return jsonify({"results": results})
+    except Exception as e:
+        print(f"Geo search error: {e}")
+    return jsonify({"results": []})
+
+@app.route("/api/geo/ip-lookup", methods=["GET"])
+def geo_ip_lookup():
+    """
+    Resolves client approximate latitude and longitude based on public IP.
+    Fallback when client lacks GPS or runs indoors / without HTTPS permissions.
+    """
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
+    if client_ip and "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+
+    is_private = not client_ip or client_ip.startswith(("127.", "192.168.", "10.", "172.16.", "::1", "localhost"))
+    target_url = "https://ipapi.co/json/" if is_private else f"https://ipapi.co/{client_ip}/json/"
+
+    try:
+        resp = requests.get(target_url, headers={"User-Agent": "RoadGuardAI/1.0"}, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            if "latitude" in data and "longitude" in data:
+                return jsonify({
+                    "success": True,
+                    "latitude": float(data["latitude"]),
+                    "longitude": float(data["longitude"]),
+                    "city": data.get("city", "Unknown City"),
+                    "region": data.get("region", ""),
+                    "country": data.get("country_name", "India"),
+                    "source": "IP Geolocation"
+                })
+    except Exception:
+        pass
+
+    try:
+        fallback_url = "http://ip-api.com/json/" if is_private else f"http://ip-api.com/json/{client_ip}"
+        resp2 = requests.get(fallback_url, timeout=3)
+        if resp2.status_code == 200:
+            data2 = resp2.json()
+            if data2.get("status") == "success":
+                return jsonify({
+                    "success": True,
+                    "latitude": float(data2["lat"]),
+                    "longitude": float(data2["lon"]),
+                    "city": data2.get("city", ""),
+                    "region": data2.get("regionName", ""),
+                    "country": data2.get("country", ""),
+                    "source": "IP Geolocation"
+                })
+    except Exception:
+        pass
+
+    return jsonify({
+        "success": False,
+        "latitude": 12.9716,
+        "longitude": 77.5946,
+        "city": "Bangalore",
+        "region": "Karnataka",
+        "source": "Default Location"
     })
 
 @app.route("/api/reports", methods=["GET"])

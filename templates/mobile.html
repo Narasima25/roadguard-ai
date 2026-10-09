@@ -6,7 +6,7 @@
   <title>RoadGuard — Mobile AI Road Inspector</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <style>
     :root {
       --bg: #030712;
@@ -730,6 +730,118 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+
+    /* Map Search Bar & Autocomplete */
+    .map-search-bar {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 68px;
+      z-index: 800;
+    }
+    .map-search-input {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      color: #f8fafc;
+      font-size: 13px;
+      padding: 10px 14px;
+      outline: none;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      transition: border-color 0.2s;
+    }
+    .map-search-input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+    .map-search-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: rgba(15, 23, 42, 0.98);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      z-index: 850;
+    }
+    .map-search-item {
+      padding: 10px 14px;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      cursor: pointer;
+      color: #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .map-search-item:last-child { border-bottom: none; }
+    .map-search-item:hover, .map-search-item:active {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+    }
+
+    /* Geo Modals */
+    .geo-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index: 3000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: viewFade 0.2s ease-out;
+    }
+    .geo-modal-box {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 18px;
+      max-width: 420px;
+      width: 100%;
+      padding: 20px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    }
+    .geo-modal-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 800;
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: #f8fafc;
+    }
+    .geo-modal-close {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .geo-modal-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--surface-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: #f8fafc;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      outline: none;
+      margin-top: 4px;
+    }
+    .geo-modal-input:focus { border-color: #38bdf8; }
   </style>
 </head>
 <body>
@@ -743,20 +855,20 @@
         <p>AI Road & Pothole Inspector</p>
       </div>
     </div>
-    <div class="header-status-pill" id="header-gps-pill">
+    <div class="header-status-pill searching" id="header-gps-pill" onclick="openGpsInfoModal()" style="cursor:pointer;" title="Tap for GPS Diagnostics">
       <span class="pulse-dot"></span>
-      <span id="gps-pill-text">GPS READY</span>
+      <span id="gps-pill-text">ACQUIRING GPS...</span>
     </div>
   </header>
 
   <!-- Live Telemetry Strip -->
-  <section class="telemetry-strip">
+  <section class="telemetry-strip" onclick="switchTab('map')" style="cursor:pointer;" title="Tap to view on GIS map">
     <div class="geo-coord">
       <span>📍</span>
       <span id="live-coords">12.97160° N, 77.59460° E</span>
     </div>
     <div class="geo-road-name" id="live-road-name">
-      Bangalore, Karnataka
+      Acquiring location...
     </div>
   </section>
 
@@ -786,7 +898,7 @@
       <div class="hud-overlay">
         <div class="hud-top-meta">
           <span>YOLOv8 MODEL: INDIAN ROAD DAMAGE</span>
-          <span id="hud-accuracy-disp">ACC: ±3m</span>
+          <span id="hud-accuracy-disp">ACC: LOCATING</span>
         </div>
 
         <div class="hud-target-box">
@@ -825,11 +937,15 @@
         </button>
       </div>
 
-      <!-- Quick Location Jumpers -->
+      <!-- Quick Location Controls -->
       <div class="quick-chips-row">
-        <button class="chip-btn active" onclick="requestSatelliteGPS()">
+        <button class="chip-btn active" id="chip-gps-btn" onclick="acquireLocation(true)">
           🛰️ My Live GPS
         </button>
+        <button class="chip-btn" id="chip-watch-btn" onclick="toggleLiveTracking()">
+          📍 Auto Track: OFF
+        </button>
+        <button class="chip-btn" onclick="openManualCoordModal()">✏️ Lat/Lon</button>
         <button class="chip-btn" onclick="jumpLocation('BANGALORE')">Bangalore</button>
         <button class="chip-btn" onclick="jumpLocation('DELHI')">Delhi</button>
         <button class="chip-btn" onclick="jumpLocation('MUMBAI')">Mumbai</button>
@@ -899,29 +1015,39 @@
        ========================================== -->
   <div class="tab-content" id="tab-map">
     <div class="map-tab-container">
+      <!-- Search Bar -->
+      <div class="map-search-bar">
+        <input type="text" class="map-search-input" id="map-search-input" placeholder="🔍 Search road, locality or city..." autocomplete="off">
+        <div class="map-search-dropdown" id="map-search-dropdown"></div>
+      </div>
+
       <div id="gis-fullmap"></div>
 
       <!-- Map Floating Action Buttons -->
       <div class="map-fab-stack">
-        <button class="map-fab" onclick="requestSatelliteGPS()" title="Lock My GPS">🎯</button>
-        <button class="map-fab" onclick="refreshMapIncidents()" title="Reload Pins">🔄</button>
+        <button class="map-fab" onclick="acquireLocation(true)" title="Lock My GPS">🎯</button>
+        <button class="map-fab" onclick="toggleLiveTracking()" id="fab-tracking-btn" title="Toggle Auto-Tracking">📍</button>
+        <button class="map-fab" onclick="refreshMapIncidents()" title="Reload Damage Pins">🔄</button>
         <button class="map-fab" onclick="toggleMapTiles()" title="Toggle Satellite/Street">🛰️</button>
       </div>
 
       <!-- Map Pinpoint Info Drawer -->
       <div class="map-bottom-drawer">
-        <div>
+        <div style="flex:1; min-width:0; margin-right:10px;">
           <span style="font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Selected Map Pin</span>
-          <div id="drawer-pin-road" style="font-size: 13px; font-weight: 700; color: #f8fafc; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          <div id="drawer-pin-road" style="font-size: 13px; font-weight: 700; color: #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             Tap anywhere to pin
           </div>
           <div id="drawer-pin-coords" style="font-size: 11px; font-family: 'JetBrains Mono', monospace; color: #38bdf8;">
             12.97160° N, 77.59460° E
           </div>
         </div>
-        <button class="chip-btn active" onclick="switchTab('scanner'); triggerCameraCapture();" style="padding: 8px 12px;">
-          📸 Inspect Here
-        </button>
+        <div style="display:flex; gap:6px;">
+          <button class="chip-btn" onclick="openManualCoordModal()" style="padding: 8px 10px;" title="Edit Coordinates">✏️</button>
+          <button class="chip-btn active" onclick="switchTab('scanner'); triggerCameraCapture();" style="padding: 8px 12px;">
+            📸 Inspect Here
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -967,15 +1093,63 @@
     </div>
   </nav>
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Manual Coordinates Modal -->
+  <div class="geo-modal-overlay" id="manual-coord-modal" style="display:none;">
+    <div class="geo-modal-box">
+      <div class="geo-modal-title">
+        <span>📍 Set Exact Coordinates</span>
+        <button class="geo-modal-close" onclick="closeManualCoordModal()">✕</button>
+      </div>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px;">
+        Type or paste latitude and longitude to pinpoint the road directly.
+      </p>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
+        <div>
+          <label style="font-size:11px; font-weight:700; color:#cbd5e1;">Latitude (-90 to 90)</label>
+          <input type="number" step="any" id="manual-lat-input" class="geo-modal-input" placeholder="e.g. 12.9716">
+        </div>
+        <div>
+          <label style="font-size:11px; font-weight:700; color:#cbd5e1;">Longitude (-180 to 180)</label>
+          <input type="number" step="any" id="manual-lon-input" class="geo-modal-input" placeholder="e.g. 77.5946">
+        </div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-sheet-action" onclick="pasteCoordinatesFromClipboard()" style="flex:1;">📋 Paste</button>
+        <button class="btn-sheet-action primary" onclick="applyManualCoordinates()" style="flex:1;">✅ Apply Pin</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GPS Status Diagnostics Modal -->
+  <div class="geo-modal-overlay" id="gps-diag-modal" style="display:none;">
+    <div class="geo-modal-box">
+      <div class="geo-modal-title">
+        <span>🛰️ Location Diagnostics</span>
+        <button class="geo-modal-close" onclick="closeGpsInfoModal()">✕</button>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; font-size:12px; margin-bottom:16px;">
+        <div><strong>Status:</strong> <span id="diag-status" style="color:#4ade80;">Active</span></div>
+        <div><strong>Provider:</strong> <span id="diag-provider" style="color:#38bdf8;">--</span></div>
+        <div><strong>Coordinates:</strong> <span id="diag-coords" style="font-family:'JetBrains Mono',monospace;">--</span></div>
+        <div><strong>Accuracy:</strong> <span id="diag-acc">--</span></div>
+        <div><strong>Road / Area:</strong> <span id="diag-road">--</span></div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-sheet-action primary" onclick="acquireLocation(true); closeGpsInfoModal();">🔄 Refresh GPS</button>
+        <button class="btn-sheet-action" onclick="closeGpsInfoModal(); switchTab('map');">🗺️ View Map</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS from High-Availability CDN with Fallback -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script>
     // State Variables
     let currentLat = 12.9716;
     let currentLon = 77.5946;
     let currentAccuracy = 0;
     let currentAddress = "Bangalore, Karnataka";
-    let locationSource = "Auto GPS";
+    let locationSource = "Auto Locating...";
     let selectedFile = null;
     let map = null;
     let mapMarker = null;
@@ -986,6 +1160,8 @@
     let satelliteTileLayer = null;
     let allIncidents = [];
     let currentFilter = 'ALL';
+    let watchId = null;
+    let isTracking = false;
 
     const CITIES = {
       'BANGALORE': { lat: 12.9716, lon: 77.5946, name: 'Bangalore, Karnataka' },
@@ -1010,7 +1186,10 @@
 
       if (tabId === 'map') {
         if (!map) initGISMap();
-        setTimeout(() => { map.invalidateSize(); }, 200);
+        [50, 150, 300, 600].forEach(ms => {
+          setTimeout(() => { if (map) map.invalidateSize(); }, ms);
+        });
+        if (mapMarker) mapMarker.setLatLng([currentLat, currentLon]);
       } else if (tabId === 'feed') {
         fetchRecentIncidents();
       }
@@ -1018,13 +1197,22 @@
 
     // 2. GIS Map Initialization
     function initGISMap() {
+      if (map) return;
       map = L.map('gis-fullmap', {
         zoomControl: false,
         attributionControl: false
       }).setView([currentLat, currentLon], 16);
 
-      streetTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
-      satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+      // Multi-subdomain street tiles for maximum throughput
+      streetTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        subdomains: ['a', 'b', 'c']
+      });
+
+      // Satellite tiles
+      satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19
+      });
 
       streetTileLayer.addTo(map);
       incidentsLayer.addTo(map);
@@ -1032,9 +1220,9 @@
       // Pin Icon
       const pinIcon = L.divIcon({
         className: 'custom-map-pin',
-        html: `<div style="background:#ef4444; width:18px; height:18px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 12px rgba(239,68,68,0.8);"></div>`,
-        iconSize: [18, 18],
-        iconAnchor: [9, 9]
+        html: `<div style="background:#ef4444; width:22px; height:22px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 15px rgba(239,68,68,0.9); display:flex; align-items:center; justify-content:center; color:#fff; font-size:10px;">📍</div>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11]
       });
 
       mapMarker = L.marker([currentLat, currentLon], { draggable: true, icon: pinIcon }).addTo(map);
@@ -1047,6 +1235,14 @@
       map.on('click', function (e) {
         updateLocationState(e.latlng.lat, e.latlng.lng, 0, 'Interactive Map Pin');
       });
+
+      // Automatic resize listener
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => {
+          if (map) map.invalidateSize();
+        });
+        ro.observe(document.getElementById('gis-fullmap'));
+      }
 
       refreshMapIncidents();
     }
@@ -1106,8 +1302,8 @@
 
     // 3. Location State Management
     function updateLocationState(lat, lon, acc, source) {
-      currentLat = Number(lat.toFixed(6));
-      currentLon = Number(lon.toFixed(6));
+      currentLat = Number(Number(lat).toFixed(6));
+      currentLon = Number(Number(lon).toFixed(6));
       currentAccuracy = acc;
       locationSource = source;
 
@@ -1137,6 +1333,12 @@
       if (source.includes('Satellite') || source.includes('Hardware')) {
         pill.className = 'header-status-pill';
         pillText.innerText = `GPS ±${Math.round(acc)}m`;
+      } else if (source.includes('Network')) {
+        pill.className = 'header-status-pill';
+        pillText.innerText = `NET ±${Math.round(acc)}m`;
+      } else if (source.includes('IP')) {
+        pill.className = 'header-status-pill searching';
+        pillText.innerText = `IP GEO`;
       } else {
         pill.className = 'header-status-pill searching';
         pillText.innerText = `PINNED`;
@@ -1145,48 +1347,119 @@
       reverseGeocode(currentLat, currentLon);
     }
 
-    // 4. Request Hardware Satellite GPS
-    function requestSatelliteGPS() {
-      triggerHaptic();
-      if (!('geolocation' in navigator)) {
-        showToast('⚠️ Geolocation not supported');
-        return;
-      }
+    // 4. Multi-tier Geolocation Engine (Satellite -> Network -> IP -> Manual)
+    async function acquireLocation(userTriggered = false) {
+      if (userTriggered) triggerHaptic();
 
-      showToast('🛰️ Locking Satellite GPS...');
       const pill = document.getElementById('header-gps-pill');
       const pillText = document.getElementById('gps-pill-text');
       pill.className = 'header-status-pill searching';
-      pillText.innerText = 'LOCKING...';
+      pillText.innerText = 'LOCATING...';
 
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          const acc = pos.coords.accuracy || 3;
-          updateLocationState(lat, lon, acc, 'Hardware Satellite GPS');
-          if (map) map.flyTo([lat, lon], 17);
-          showToast(`✅ GPS Locked (±${Math.round(acc)}m Accuracy)`);
-        },
-        (err) => {
-          console.warn('Geolocation error:', err.message);
-          pill.className = 'header-status-pill searching';
-          pillText.innerText = 'PINPOINT';
+      if (userTriggered) showToast('🛰️ Finding your location...');
 
-          if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-            alert(
-              "📱 Mobile Browser Security Note:\n\n" +
-              "To unlock 100% continuous hardware satellite GPS on phone:\n" +
-              "1. Run server with HTTPS: python run.py --https\n" +
-              "2. Or tap anywhere on the GIS map to pinpoint your location\n" +
-              "3. Photo camera EXIF GPS is automatically detected!"
-            );
-          } else {
-            showToast('⚠️ GPS error: check permissions');
+      if (!('geolocation' in navigator)) {
+        console.warn('Browser geolocation unsupported, using IP fallback');
+        await fallbackToIpLocation('No Browser GPS Support');
+        return;
+      }
+
+      const tryTier1 = () => new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          pos => resolve(pos),
+          err => reject(err),
+          { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
+        );
+      });
+
+      const tryTier2 = () => new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          pos => resolve(pos),
+          err => reject(err),
+          { enableHighAccuracy: false, timeout: 4500, maximumAge: 60000 }
+        );
+      });
+
+      try {
+        const pos = await tryTier1();
+        handlePositionSuccess(pos, 'Hardware Satellite GPS');
+      } catch (err1) {
+        console.warn('Tier 1 GPS timeout/error:', err1.message, '- Trying Tier 2 Network...');
+        try {
+          const pos2 = await tryTier2();
+          handlePositionSuccess(pos2, 'Network Triangulation');
+        } catch (err2) {
+          console.warn('Tier 2 Network positioning failed:', err2.message, '- Trying Tier 3 IP...');
+          await fallbackToIpLocation('IP Geolocation');
+        }
+      }
+    }
+
+    function handlePositionSuccess(pos, sourceLabel) {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const acc = pos.coords.accuracy || 5;
+      updateLocationState(lat, lon, acc, sourceLabel);
+      if (map) {
+        map.flyTo([lat, lon], 17, { animate: true, duration: 1.2 });
+      }
+      showToast(`✅ ${sourceLabel.includes('Satellite') ? 'GPS' : 'Location'} locked (±${Math.round(acc)}m)`);
+    }
+
+    async function fallbackToIpLocation(reason) {
+      try {
+        const res = await fetch('/api/geo/ip-lookup');
+        const data = await res.json();
+        if (data.latitude && data.longitude) {
+          updateLocationState(data.latitude, data.longitude, 2500, `${data.source || 'IP Location'} (${data.city || ''})`);
+          if (map) {
+            map.flyTo([data.latitude, data.longitude], 15);
           }
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
+          showToast(`📍 Positioned near ${data.city || 'your area'}`);
+        } else {
+          showToast('⚠️ Tap map or enter coordinates');
+        }
+      } catch (e) {
+        console.warn('IP location fetch failed:', e);
+        showToast('⚠️ Tap map to pinpoint location');
+      }
+    }
+
+    function toggleLiveTracking() {
+      triggerHaptic();
+      const chipBtn = document.getElementById('chip-watch-btn');
+      const fabBtn = document.getElementById('fab-tracking-btn');
+
+      if (isTracking) {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        isTracking = false;
+        if (chipBtn) { chipBtn.classList.remove('active'); chipBtn.innerText = '📍 Auto Track: OFF'; }
+        if (fabBtn) { fabBtn.style.color = '#38bdf8'; fabBtn.title = 'Start Live Tracking'; }
+        showToast('⏹️ Live tracking stopped');
+      } else {
+        if (!('geolocation' in navigator)) {
+          showToast('⚠️ Geolocation not supported');
+          return;
+        }
+        isTracking = true;
+        if (chipBtn) { chipBtn.classList.add('active'); chipBtn.innerText = '📡 Auto Track: ON'; }
+        if (fabBtn) { fabBtn.style.color = '#4ade80'; fabBtn.title = 'Stop Live Tracking'; }
+        showToast('📡 Live continuous tracking active');
+
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+            const acc = pos.coords.accuracy || 3;
+            updateLocationState(lat, lon, acc, 'Live Continuous GPS');
+          },
+          (err) => {
+            console.warn('Watch error:', err);
+          },
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
+        );
+      }
     }
 
     // 5. Jump City Preset
@@ -1200,29 +1473,139 @@
       }
     }
 
-    // 6. Reverse Geocode via OpenStreetMap
+    // 6. Reverse Geocode via Backend Proxy (Bypasses Render 403 / CORS)
     let reverseGeocodeTimer = null;
     function reverseGeocode(lat, lon) {
       clearTimeout(reverseGeocodeTimer);
       reverseGeocodeTimer = setTimeout(async () => {
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`);
+          const res = await fetch(`/api/geo/reverse?lat=${lat}&lon=${lon}`);
           const data = await res.json();
-          if (data && data.display_name) {
-            const addr = data.address || {};
-            const road = addr.road || addr.suburb || addr.neighbourhood || addr.city || '';
-            const city = addr.city || addr.town || addr.state_district || '';
-            currentAddress = road ? `${road}, ${city}` : data.display_name.split(',').slice(0, 3).join(',');
+          if (data && data.success && data.address) {
+            currentAddress = data.address;
             document.getElementById('live-road-name').innerText = currentAddress;
             document.getElementById('drawer-pin-road').innerText = currentAddress;
           }
         } catch (e) {
           document.getElementById('live-road-name').innerText = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
         }
-      }, 400);
+      }, 350);
     }
 
-    // 7. Camera Trigger & File Handling
+    // 7. Interactive Road & City Search
+    let searchDebounce = null;
+    function setupMapSearch() {
+      const input = document.getElementById('map-search-input');
+      const dropdown = document.getElementById('map-search-dropdown');
+      if (!input || !dropdown) return;
+
+      input.addEventListener('input', (e) => {
+        const q = e.target.value.trim();
+        clearTimeout(searchDebounce);
+        if (q.length < 2) {
+          dropdown.style.display = 'none';
+          dropdown.innerHTML = '';
+          return;
+        }
+        searchDebounce = setTimeout(async () => {
+          try {
+            const res = await fetch(`/api/geo/search?q=${encodeURIComponent(q)}`);
+            const data = await res.json();
+            if (data.results && data.results.length > 0) {
+              dropdown.innerHTML = data.results.map(r => `
+                <div class="map-search-item" onclick="selectSearchResult(${r.lat}, ${r.lon}, '${(r.short_name || '').replace(/'/g, "\\'")}')">
+                  <strong style="color:#f8fafc;">${r.short_name || r.display_name}</strong>
+                  <span style="font-size:10px; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${r.display_name}</span>
+                </div>
+              `).join('');
+              dropdown.style.display = 'block';
+            } else {
+              dropdown.style.display = 'none';
+            }
+          } catch (err) {
+            dropdown.style.display = 'none';
+          }
+        }, 300);
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.map-search-bar')) {
+          dropdown.style.display = 'none';
+        }
+      });
+    }
+
+    function selectSearchResult(lat, lon, name) {
+      triggerHaptic();
+      document.getElementById('map-search-input').value = name;
+      document.getElementById('map-search-dropdown').style.display = 'none';
+      updateLocationState(lat, lon, 0, `Searched: ${name}`);
+      if (map) {
+        map.flyTo([lat, lon], 17, { animate: true, duration: 1.2 });
+      }
+      showToast(`📍 Pinned to ${name}`);
+    }
+
+    // 8. Manual Coordinates Modal
+    function openManualCoordModal() {
+      triggerHaptic();
+      document.getElementById('manual-lat-input').value = currentLat;
+      document.getElementById('manual-lon-input').value = currentLon;
+      document.getElementById('manual-coord-modal').style.display = 'flex';
+    }
+
+    function closeManualCoordModal() {
+      document.getElementById('manual-coord-modal').style.display = 'none';
+    }
+
+    function applyManualCoordinates() {
+      const lat = parseFloat(document.getElementById('manual-lat-input').value);
+      const lon = parseFloat(document.getElementById('manual-lon-input').value);
+      if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        alert('Please enter valid coordinates (-90 to 90 lat, -180 to 180 lon)');
+        return;
+      }
+      triggerHaptic();
+      closeManualCoordModal();
+      updateLocationState(lat, lon, 0, 'Manual Coordinate Entry');
+      if (map) map.flyTo([lat, lon], 17);
+      showToast(`📍 Set to ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+    }
+
+    async function pasteCoordinatesFromClipboard() {
+      try {
+        const text = await navigator.clipboard.readText();
+        const parts = text.split(/[\s,]+/);
+        if (parts.length >= 2) {
+          const p1 = parseFloat(parts[0]);
+          const p2 = parseFloat(parts[1]);
+          if (!isNaN(p1) && !isNaN(p2)) {
+            document.getElementById('manual-lat-input').value = p1;
+            document.getElementById('manual-lon-input').value = p2;
+            showToast('📋 Coordinates pasted!');
+          }
+        }
+      } catch (e) {
+        showToast('⚠️ Could not read clipboard');
+      }
+    }
+
+    // 9. GPS Diagnostics Info Modal
+    function openGpsInfoModal() {
+      triggerHaptic();
+      document.getElementById('diag-provider').innerText = locationSource;
+      document.getElementById('diag-coords').innerText = `${currentLat.toFixed(5)}° N, ${currentLon.toFixed(5)}° E`;
+      document.getElementById('diag-acc').innerText = currentAccuracy > 0 ? `±${Math.round(currentAccuracy)} meters` : 'Pinpoint (Manual)';
+      document.getElementById('diag-road').innerText = currentAddress;
+      document.getElementById('diag-status').innerText = locationSource.includes('Satellite') ? 'Hardware GPS Active' : 'Active';
+      document.getElementById('gps-diag-modal').style.display = 'flex';
+    }
+
+    function closeGpsInfoModal() {
+      document.getElementById('gps-diag-modal').style.display = 'none';
+    }
+
+    // 10. Camera Trigger & File Handling
     function triggerCameraCapture() {
       triggerHaptic();
       document.getElementById('file-capture').click();
@@ -1248,7 +1631,7 @@
       selectedFile = null;
     }
 
-    // 8. Upload & Run AI Inference
+    // 11. Upload & Run AI Inference
     async function uploadAndRunInference() {
       if (!selectedFile) return;
       triggerHaptic();
@@ -1304,7 +1687,7 @@
       document.getElementById('res-severity-fill').style.width = `${score * 10}%`;
 
       document.getElementById('res-annotated-img').src = data.annotated_url;
-      document.getElementById('res-coords').innerText = `${data.latitude.toFixed(5)}° N, ${data.longitude.toFixed(5)}° E`;
+      document.getElementById('res-coords').innerText = `${Number(data.latitude).toFixed(5)}° N, ${Number(data.longitude).toFixed(5)}° E`;
       document.getElementById('res-road').innerText = data.address || currentAddress;
       document.getElementById('res-conf').innerText = `${Math.round(data.confidence * 100)}%`;
       document.getElementById('res-count').innerText = `${data.detected_count} bounding boxes`;
@@ -1322,7 +1705,7 @@
       triggerCameraCapture();
     }
 
-    // 9. Incident Log Feed Fetcher
+    // 12. Incident Log Feed Fetcher
     async function fetchRecentIncidents() {
       const container = document.getElementById('feed-list-container');
       container.innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8;">Loading reports...</div>';
@@ -1372,7 +1755,7 @@
       }
     }
 
-    // 10. Toast Notification Helper
+    // 13. Toast Notification Helper
     let toastTimeout = null;
     function showToast(msg) {
       const box = document.getElementById('toast-box');
@@ -1382,14 +1765,14 @@
       toastTimeout = setTimeout(() => { box.classList.remove('show'); }, 3000);
     }
 
-    // 11. Haptic Vibration Helper
+    // 14. Haptic Vibration Helper
     function triggerHaptic() {
       if ('vibrate' in navigator) {
         try { navigator.vibrate(15); } catch(e){}
       }
     }
 
-    // 12. Optional Live Video Stream in Secure Contexts
+    // 15. Optional Live Video Stream in Secure Contexts
     async function initLiveStreamIfSecure() {
       if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
       try {
@@ -1406,9 +1789,11 @@
       }
     }
 
+    // 16. Page Load Initializer
     window.onload = () => {
       initLiveStreamIfSecure();
-      reverseGeocode(currentLat, currentLon);
+      setupMapSearch();
+      acquireLocation(false); // Automatically acquires location on load!
     };
   </script>
 </body>

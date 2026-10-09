@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <style>
     :root {
       --bg-dark: #0f172a;
@@ -455,7 +455,10 @@
     <div class="map-container">
       <div class="box-header">
         <span class="box-title">🗺️ Live GPS Damage Map</span>
-        <span style="font-size: 12px; color: var(--text-muted);">Auto-updating pins</span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px;" onclick="resetMapView()">🎯 Fit All Pins</button>
+          <span style="font-size: 12px; color: var(--text-muted);">Auto-updating</span>
+        </div>
       </div>
       <div id="map"></div>
     </div>
@@ -515,13 +518,14 @@
   </div>
 
   <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script>
     let map;
     let markersLayer = L.layerGroup();
     let reportsData = [];
     let currentFilter = 'ALL';
     let activeReportId = null;
+    let hasInitiallyFitBounds = false;
 
     // Priority color mapping
     const PRIO_COLORS = {
@@ -534,13 +538,14 @@
     function initMap() {
       // Default center around Bangalore / India
       map = L.map('map', { zoomControl: true }).setView([12.9716, 77.5946], 13);
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        subdomains: ['a', 'b', 'c'],
         maxZoom: 19
       }).addTo(map);
       markersLayer.addTo(map);
       // Fix grey/blank tiles on initial load
-      setTimeout(() => { map.invalidateSize(); }, 300);
+      [100, 300, 600].forEach(ms => setTimeout(() => { if (map) map.invalidateSize(); }, ms));
     }
 
     function createCircleMarker(lat, lon, priority, title) {
@@ -591,8 +596,22 @@
           bounds.push([r.latitude, r.longitude]);
         }
       });
+      // Only fit bounds on first load to prevent resetting officer's pan/zoom every 6s
+      if (!hasInitiallyFitBounds && bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+        hasInitiallyFitBounds = true;
+      }
+    }
+
+    function resetMapView() {
+      const bounds = [];
+      reportsData.forEach(r => {
+        if (r.latitude && r.longitude) bounds.push([r.latitude, r.longitude]);
+      });
       if (bounds.length > 0) {
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      } else {
+        map.setView([12.9716, 77.5946], 13);
       }
     }
 
@@ -642,6 +661,10 @@
       document.getElementById('modal-status').value = r.status;
       document.getElementById('modal-address').innerText = r.address || 'Street address not recorded';
       document.getElementById('modal-source').innerText = r.source || 'Standard GPS';
+
+      if (r.latitude && r.longitude && map) {
+        map.panTo([r.latitude, r.longitude]);
+      }
 
       document.getElementById('modal').classList.add('active');
     }
