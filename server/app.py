@@ -200,7 +200,7 @@ def load_ai_model():
     if custom_model_path.exists():
         print(f"✅ Loading custom trained Indian road damage model: {custom_model_path}")
         model = YOLO(str(custom_model_path))
-        model_source = "Custom Indian Road Model (best.pt)"
+        model_source = "RDD2022 AI Model (Cracks & Potholes)"
     else:
         print("⚠️ models/best.pt not found yet. Loading base YOLOv8n model...")
         model = YOLO("yolov8n.pt")
@@ -222,24 +222,20 @@ def compute_priority_and_severity(detections, img_width, img_height):
     if not detections:
         return "LOW", 1, "None Detected"
     
-    # Priority mapping weights by class keyword (matched to trained model classes)
-    # Model classes: {0: 'Drain Hole', 1: 'circle-drain-clean-', 2: 'drain-clean-',
-    #   3: 'drain-not clean-', 4: 'hole', 5: 'manhole', 6: 'pothole', 7: 'sewer cover'}
+    # Priority mapping weights by class keyword (matched to RDD2022 damage classes:
+    # 0: longitudinal_crack, 1: transverse_crack, 2: alligator_crack, 3: pothole)
     class_weights = {
-        "pothole": 5,           # Class 6 — most dangerous
-        "hole": 5,              # Class 4 — generic hole
-        "drain hole": 4,        # Class 0 — open drain hole
-        "manhole": 5,           # Class 5 — missing/damaged manhole cover
-        "sewer cover": 3,       # Class 7 — damaged sewer cover
-        "drain-not clean": 4,   # Class 3 — clogged drain (flood risk)
-        "drain-clean": 2,       # Class 2 — clean drain (low risk)
-        "circle-drain-clean": 2,# Class 1 — circular drain, clean
-        "drain": 3,             # Catch-all for drain variants
-        "sewer": 3,
-        "crack": 3,
+        "pothole": 5,             # Deep cavities — high vehicle danger
+        "alligator_crack": 4,     # Structural fatigue mesh cracking
         "alligator": 4,
+        "transverse_crack": 3,    # Cross-lane structural crack
         "transverse": 3,
+        "longitudinal_crack": 2,  # Lengthwise joint crack
         "longitudinal": 2,
+        "crack": 3,
+        "hole": 5,
+        "manhole": 4,
+        "drain": 3,
     }
     
     total_area_ratio = 0.0
@@ -391,11 +387,12 @@ def detect_damage():
     if model is None:
         load_ai_model()
 
+    # Run inference with conf=0.20 to capture fine road cracks and potholes
     if torch is not None:
         with torch.no_grad():
-            results = model.predict(img, conf=0.25, imgsz=480, device="cpu", verbose=False)
+            results = model.predict(img, conf=0.20, imgsz=480, device="cpu", verbose=False)
     else:
-        results = model.predict(img, conf=0.25, imgsz=480, device="cpu", verbose=False)
+        results = model.predict(img, conf=0.20, imgsz=480, device="cpu", verbose=False)
     
     detections = []
     annotated_img = img.copy()
@@ -406,7 +403,8 @@ def detect_damage():
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             conf = float(box.conf[0])
             cls_id = int(box.cls[0])
-            cls_name = model.names.get(cls_id, f"Class {cls_id}")
+            raw_cls = model.names.get(cls_id, f"Damage {cls_id}")
+            cls_name = raw_cls.replace("_", " ").title()
 
             detections.append({
                 "class": cls_name,
@@ -414,8 +412,20 @@ def detect_damage():
                 "box": [x1, y1, x2, y2]
             })
 
+            # Color coding tailored by damage type (BGR format)
+            c_low = raw_cls.lower()
+            if "pothole" in c_low or "hole" in c_low:
+                color = (0, 0, 255)       # Red: Severe cavity
+            elif "alligator" in c_low:
+                color = (0, 100, 255)     # Deep Orange: Severe structural web crack
+            elif "transverse" in c_low:
+                color = (0, 180, 255)     # Amber: Cross-lane structural crack
+            elif "longitudinal" in c_low:
+                color = (255, 170, 0)     # Cyan/Teal: Longitudinal joint crack
+            else:
+                color = (0, 200, 255)     # Gold: General road damage
+
             # Draw stylish bounding box
-            color = (0, 0, 255) if "pothole" in cls_name.lower() or "hole" in cls_name.lower() else (0, 165, 255)
             cv2.rectangle(annotated_img, (x1, y1), (x2, y2), color, 3)
             
             # Label banner
