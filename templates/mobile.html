@@ -1535,7 +1535,7 @@
         navigator.geolocation.getCurrentPosition(
           pos => resolve(pos),
           err => reject(err),
-          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
         );
       });
 
@@ -1544,7 +1544,7 @@
         navigator.geolocation.getCurrentPosition(
           pos => resolve(pos),
           err => reject(err),
-          { enableHighAccuracy: false, timeout: 5000, maximumAge: 15000 }
+          { enableHighAccuracy: false, timeout: 6000, maximumAge: 10000 }
         );
       });
 
@@ -1561,6 +1561,25 @@
           await fallbackToIpLocation('IP Geolocation (Approximate)');
         }
       }
+
+      // Start passive background GPS watcher to automatically upgrade to satellite lock once acquired
+      startPassiveGpsWatch();
+    }
+
+    let passiveGpsWatchId = null;
+    function startPassiveGpsWatch() {
+      if (!('geolocation' in navigator) || passiveGpsWatchId !== null) return;
+      try {
+        passiveGpsWatchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            if (pos && pos.coords && pos.coords.accuracy < 100) {
+              handlePositionSuccess(pos, 'Device Satellite GPS');
+            }
+          },
+          (err) => {},
+          { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+        );
+      } catch (e) {}
     }
 
     function panActiveMobileMap(lat, lon, zoom = 17) {
@@ -2133,8 +2152,11 @@
       }
     }
 
+    let liveAiTimeout = null;
+
     function startLiveAiScan() {
       liveAiActive = true;
+      liveAiBusy = false;
       const chipBtn = document.getElementById('chip-live-ai-btn');
       if (chipBtn) {
         chipBtn.classList.add('active');
@@ -2149,14 +2171,15 @@
         statusLabel.style.color = '#34d399';
       }
 
-      clearInterval(liveAiInterval);
-      liveAiInterval = setInterval(runLiveAiFrame, 450);
+      clearTimeout(liveAiTimeout);
+      triggerLiveAiCycle();
     }
 
     function stopLiveAiScan() {
       liveAiActive = false;
-      clearInterval(liveAiInterval);
-      liveAiInterval = null;
+      liveAiBusy = false;
+      clearTimeout(liveAiTimeout);
+      liveAiTimeout = null;
       activeLiveDetections = [];
       clearLiveHudCanvas();
 
@@ -2175,6 +2198,14 @@
       }
     }
 
+    async function triggerLiveAiCycle() {
+      if (!liveAiActive) return;
+      await runLiveAiFrame();
+      if (liveAiActive) {
+        liveAiTimeout = setTimeout(triggerLiveAiCycle, 150);
+      }
+    }
+
     async function runLiveAiFrame() {
       if (!liveAiActive || liveAiBusy) return;
       const video = document.getElementById('camera-video');
@@ -2183,42 +2214,65 @@
       liveAiBusy = true;
       try {
         const offCanvas = document.createElement('canvas');
-        offCanvas.width = 384;
-        offCanvas.height = 384;
+        offCanvas.width = 256;
+        offCanvas.height = 256;
         const ctx = offCanvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, 384, 384);
 
-        offCanvas.toBlob(async (blob) => {
-          if (!blob) { liveAiBusy = false; return; }
-          const fd = new FormData();
-          fd.append('image', blob, 'frame.jpg');
+        // Extract precise visible viewport crop so normalized boxes map 1:1 onto screen
+        const vw = video.videoWidth || 1280;
+        const vh = video.videoHeight || 720;
+        const rect = video.getBoundingClientRect();
+        const dw = rect.width || 360;
+        const dh = rect.height || 360;
+        const scale = Math.max(dw / vw, dh / vh);
+        const cropW = Math.min(vw, dw / scale);
+        const cropH = Math.min(vh, dh / scale);
+        const cropX = Math.max(0, (vw - cropW) / 2);
+        const cropY = Math.max(0, (vh - cropH) / 2);
 
-          try {
-            const res = await fetch('/api/detect/live', { method: 'POST', body: fd });
-            const data = await res.json();
-            if (data && data.success && liveAiActive) {
-              activeLiveDetections = data.detections || [];
-              drawLiveHudOverlay(activeLiveDetections);
-              const statusLabel = document.getElementById('live-ai-status-label');
-              if (activeLiveDetections.length > 0) {
-                triggerHaptic();
-                const top = activeLiveDetections[0];
-                if (statusLabel) {
-                  statusLabel.innerText = `⚠️ ${top.class.toUpperCase()} (${Math.round(top.confidence * 100)}%)`;
-                  statusLabel.style.color = '#f87171';
-                }
-              } else if (statusLabel) {
-                statusLabel.innerText = '⚡ LIVE RADAR: SCANNING (ROAD CLEAR)';
-                statusLabel.style.color = '#34d399';
-              }
+        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, 256, 256);
+
+        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.55));
+        if (!blob || !liveAiActive) {
+          liveAiBusy = false;
+          return;
+        }
+
+        const fd = new FormData();
+        fd.append('image', blob, 'frame.jpg');
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2200);
+
+        const res = await fetch('/api/detect/live', {
+          method: 'POST',
+          body: fd,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!res.ok) throw new Error('Live radar error ' + res.status);
+        const data = await res.json();
+
+        if (data && data.success && liveAiActive) {
+          activeLiveDetections = data.detections || [];
+          drawLiveHudOverlay(activeLiveDetections);
+          const statusLabel = document.getElementById('live-ai-status-label');
+          if (activeLiveDetections.length > 0) {
+            triggerHaptic();
+            const top = activeLiveDetections[0];
+            if (statusLabel) {
+              statusLabel.innerText = `⚠️ ${top.class.toUpperCase()} (${Math.round(top.confidence * 100)}%)`;
+              statusLabel.style.color = '#f87171';
             }
-          } catch (e) {
-            console.warn('Live AI frame error:', e);
-          } finally {
-            liveAiBusy = false;
+          } else if (statusLabel) {
+            statusLabel.innerText = '⚡ LIVE RADAR: SCANNING (ROAD CLEAR)';
+            statusLabel.style.color = '#34d399';
           }
-        }, 'image/jpeg', 0.6);
+        }
       } catch (e) {
+        // Ignored to allow seamless continuous frame loop
+      } finally {
         liveAiBusy = false;
       }
     }

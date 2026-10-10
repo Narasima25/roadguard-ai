@@ -15,6 +15,7 @@ from flask_cors import CORS
 import cv2  # type: ignore
 import numpy as np  # type: ignore
 from PIL import Image, ExifTags  # type: ignore
+from contextlib import nullcontext
 try:
     import torch  # type: ignore
     torch.set_num_threads(1)
@@ -22,6 +23,9 @@ try:
 except Exception:
     torch = None
 import requests
+
+# Google Maps API Key configuration
+GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
 
 # In-memory Geo Caches to prevent rate limiting
 _REVERSE_GEO_CACHE = {}
@@ -428,43 +432,44 @@ def detect_damage():
 
     raw_candidates = []
 
-    # 1. Pothole & Cavity Detection
-    if pothole_model is not None:
-        try:
-            p_res = pothole_model.predict(img, conf=0.18, imgsz=416, device="cpu", verbose=False)
-            for r in p_res:
-                for box in r.boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                    conf = float(box.conf[0])
-                    cls_id = int(box.cls[0])
-                    raw_cls = pothole_model.names.get(cls_id, f"Class {cls_id}")
-                    raw_candidates.append({
-                        "raw_cls": raw_cls,
-                        "confidence": round(conf, 3),
-                        "box": [x1, y1, x2, y2]
-                    })
-        except Exception as e:
-            print(f"Pothole model predict error: {e}")
+    with (torch.inference_mode() if torch is not None else nullcontext()):
+        # 1. Pothole & Cavity Detection
+        if pothole_model is not None:
+            try:
+                p_res = pothole_model.predict(img, conf=0.18, imgsz=384, device="cpu", verbose=False)
+                for r in p_res:
+                    for box in r.boxes:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                        conf = float(box.conf[0])
+                        cls_id = int(box.cls[0])
+                        raw_cls = pothole_model.names.get(cls_id, f"Class {cls_id}")
+                        raw_candidates.append({
+                            "raw_cls": raw_cls,
+                            "confidence": round(conf, 3),
+                            "box": [x1, y1, x2, y2]
+                        })
+            except Exception as e:
+                print(f"Pothole model predict error: {e}")
 
-    # 2. Crack & Structural Fissure Detection
-    if crack_model is not None:
-        try:
-            c_res = crack_model.predict(img, conf=0.18, imgsz=416, device="cpu", verbose=False)
-            for r in c_res:
-                for box in r.boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                    conf = float(box.conf[0])
-                    cls_id = int(box.cls[0])
-                    raw_cls = crack_model.names.get(cls_id, "crack")
-                    if "background" in raw_cls.lower():
-                        continue
-                    raw_candidates.append({
-                        "raw_cls": raw_cls,
-                        "confidence": round(conf, 3),
-                        "box": [x1, y1, x2, y2]
-                    })
-        except Exception as e:
-            print(f"Crack model predict error: {e}")
+        # 2. Crack & Structural Fissure Detection
+        if crack_model is not None:
+            try:
+                c_res = crack_model.predict(img, conf=0.18, imgsz=384, device="cpu", verbose=False)
+                for r in c_res:
+                    for box in r.boxes:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                        conf = float(box.conf[0])
+                        cls_id = int(box.cls[0])
+                        raw_cls = crack_model.names.get(cls_id, "crack")
+                        if "background" in raw_cls.lower():
+                            continue
+                        raw_candidates.append({
+                            "raw_cls": raw_cls,
+                            "confidence": round(conf, 3),
+                            "box": [x1, y1, x2, y2]
+                        })
+            except Exception as e:
+                print(f"Crack model predict error: {e}")
 
     # Non-Maximum Suppression (IoU > 0.45) to merge duplicate boxes
     raw_candidates.sort(key=lambda x: x["confidence"], reverse=True)
@@ -608,41 +613,42 @@ def detect_live_frame():
 
     raw_candidates = []
 
-    if pothole_model is not None:
-        try:
-            p_res = pothole_model.predict(img, conf=0.20, imgsz=384, device="cpu", verbose=False)
-            for r in p_res:
-                for box in r.boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                    conf = float(box.conf[0])
-                    cls_id = int(box.cls[0])
-                    raw_cls = pothole_model.names.get(cls_id, f"Class {cls_id}")
-                    raw_candidates.append({
-                        "raw_cls": raw_cls,
-                        "confidence": round(conf, 2),
-                        "box": [round(x1 / img_w, 4), round(y1 / img_h, 4), round(x2 / img_w, 4), round(y2 / img_h, 4)]
-                    })
-        except Exception:
-            pass
+    with (torch.inference_mode() if torch is not None else nullcontext()):
+        if pothole_model is not None:
+            try:
+                p_res = pothole_model.predict(img, conf=0.18, imgsz=256, device="cpu", verbose=False)
+                for r in p_res:
+                    for box in r.boxes:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                        conf = float(box.conf[0])
+                        cls_id = int(box.cls[0])
+                        raw_cls = pothole_model.names.get(cls_id, f"Class {cls_id}")
+                        raw_candidates.append({
+                            "raw_cls": raw_cls,
+                            "confidence": round(conf, 2),
+                            "box": [round(x1 / img_w, 4), round(y1 / img_h, 4), round(x2 / img_w, 4), round(y2 / img_h, 4)]
+                        })
+            except Exception:
+                pass
 
-    if crack_model is not None:
-        try:
-            c_res = crack_model.predict(img, conf=0.18, imgsz=384, device="cpu", verbose=False)
-            for r in c_res:
-                for box in r.boxes:
-                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                    conf = float(box.conf[0])
-                    cls_id = int(box.cls[0])
-                    raw_cls = crack_model.names.get(cls_id, "crack")
-                    if "background" in raw_cls.lower():
-                        continue
-                    raw_candidates.append({
-                        "raw_cls": raw_cls,
-                        "confidence": round(conf, 2),
-                        "box": [round(x1 / img_w, 4), round(y1 / img_h, 4), round(x2 / img_w, 4), round(y2 / img_h, 4)]
-                    })
-        except Exception:
-            pass
+        if crack_model is not None:
+            try:
+                c_res = crack_model.predict(img, conf=0.18, imgsz=256, device="cpu", verbose=False)
+                for r in c_res:
+                    for box in r.boxes:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                        conf = float(box.conf[0])
+                        cls_id = int(box.cls[0])
+                        raw_cls = crack_model.names.get(cls_id, "crack")
+                        if "background" in raw_cls.lower():
+                            continue
+                        raw_candidates.append({
+                            "raw_cls": raw_cls,
+                            "confidence": round(conf, 2),
+                            "box": [round(x1 / img_w, 4), round(y1 / img_h, 4), round(x2 / img_w, 4), round(y2 / img_h, 4)]
+                        })
+            except Exception:
+                pass
 
     # Non-Maximum Suppression to merge duplicate boxes
     raw_candidates.sort(key=lambda x: x["confidence"], reverse=True)
@@ -674,8 +680,6 @@ def detect_live_frame():
             })
 
     del img
-    gc.collect()
-
     return jsonify({
         "success": True,
         "count": len(detections),
