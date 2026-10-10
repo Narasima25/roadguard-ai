@@ -37,8 +37,24 @@ def fetch_reverse_geocode(lat, lon):
         if cache_key in _REVERSE_GEO_CACHE:
             return _REVERSE_GEO_CACHE[cache_key]
 
+        # Use Google Maps Geocoding API if key is present (instant & accurate)
+        if GOOGLE_MAPS_API_KEY:
+            try:
+                g_url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lon}&key={GOOGLE_MAPS_API_KEY}"
+                g_resp = requests.get(g_url, timeout=1.8)
+                if g_resp.status_code == 200:
+                    g_data = g_resp.json()
+                    if g_data.get("results"):
+                        formatted_addr = g_data["results"][0].get("formatted_address", "")
+                        res = {"success": True, "address": formatted_addr}
+                        _REVERSE_GEO_CACHE[cache_key] = res
+                        return res
+            except Exception:
+                pass
+
+        # Fallback to OpenStreetMap with tight 1.5s timeout
         url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=18&addressdetails=1"
-        resp = requests.get(url, headers=_GEO_HEADERS, timeout=4)
+        resp = requests.get(url, headers=_GEO_HEADERS, timeout=1.5)
         if resp.status_code == 200:
             data = resp.json()
             addr = data.get("address", {})
@@ -351,20 +367,23 @@ def detect_damage():
     
     image_file.save(str(raw_path))
 
-    # Priority 1: Check if photo contains actual EXIF GPS coordinates embedded by camera
-    exif_lat, exif_lon = extract_exif_gps(raw_path)
-    if exif_lat is not None and exif_lon is not None:
-        lat_val = exif_lat
-        lon_val = exif_lon
-        location_source = "Photo EXIF GPS"
-        print(f"📍 Extracted EXIF GPS from image metadata: {lat_val}, {lon_val}")
-    elif lat_val is not None and lon_val is not None:
-        location_source = source_val or "Device/Selected GPS"
+    # Coordinate hierarchy:
+    # 1. Real device coordinates passed from mobile browser (Live Hardware GPS / Pin)
+    # 2. Camera EXIF coordinates
+    # 3. Fallback demo coordinates
+    if lat_val is not None and lon_val is not None and (abs(lat_val) > 0.001 or abs(lon_val) > 0.001):
+        location_source = source_val or "Device GPS"
     else:
-        # Fallback to demo coordinates
-        lat_val = round(12.9716 + float(np.random.uniform(-0.02, 0.02)), 6)
-        lon_val = round(77.5946 + float(np.random.uniform(-0.02, 0.02)), 6)
-        location_source = "Default (Bangalore)"
+        exif_lat, exif_lon = extract_exif_gps(raw_path)
+        if exif_lat is not None and exif_lon is not None:
+            lat_val = exif_lat
+            lon_val = exif_lon
+            location_source = "Photo EXIF GPS"
+            print(f"📍 Extracted EXIF GPS from image metadata: {lat_val}, {lon_val}")
+        else:
+            lat_val = round(12.9716 + float(np.random.uniform(-0.02, 0.02)), 6)
+            lon_val = round(77.5946 + float(np.random.uniform(-0.02, 0.02)), 6)
+            location_source = "Default Coordinates"
 
     # Read image with OpenCV
     img = cv2.imread(str(raw_path))
@@ -387,12 +406,12 @@ def detect_damage():
     if model is None:
         load_ai_model()
 
-    # Run inference with conf=0.20 to capture fine road cracks and potholes
+    # Run inference with conf=0.20 and imgsz=416 for ultra-fast response
     if torch is not None:
         with torch.no_grad():
-            results = model.predict(img, conf=0.20, imgsz=480, device="cpu", verbose=False)
+            results = model.predict(img, conf=0.20, imgsz=416, device="cpu", verbose=False)
     else:
-        results = model.predict(img, conf=0.20, imgsz=480, device="cpu", verbose=False)
+        results = model.predict(img, conf=0.20, imgsz=416, device="cpu", verbose=False)
     
     detections = []
     annotated_img = img.copy()
