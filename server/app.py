@@ -16,7 +16,10 @@ import cv2  # type: ignore
 import numpy as np  # type: ignore
 from PIL import Image, ExifTags  # type: ignore
 from contextlib import nullcontext
-import onnxruntime as ort
+try:
+    import onnxruntime as ort  # type: ignore
+except Exception:
+    ort = None
 import requests
 
 # Google Maps API Key configuration
@@ -229,6 +232,10 @@ CRACK_NAMES = {
 
 def load_ai_model():
     global pothole_session, crack_session, model_source
+    if ort is None:
+        print("[WARN] onnxruntime not installed in this environment.")
+        return
+
     p_onnx = MODELS_DIR / "potholes.onnx"
     c_onnx = MODELS_DIR / "cracks.onnx"
 
@@ -890,22 +897,22 @@ if __name__ == "__main__":
     if render_url:
         dashboard_url = render_url
         mobile_url = f"{render_url}/mobile"
-        env_label = "☁️ Render Cloud (Live Public HTTPS)"
+        env_label = "Render Cloud (Live Public HTTPS)"
     elif is_hf:
         dashboard_url = f"https://huggingface.co/spaces/{os.environ.get('SPACE_ID', '')}"
         mobile_url = f"{dashboard_url}/mobile"
-        env_label = "☁️ Hugging Face Space"
+        env_label = "Hugging Face Space"
     else:
         proto = "https" if use_https else "http"
         dashboard_url = f"{proto}://localhost:{port}"
         mobile_url = f"{proto}://localhost:{port}/mobile"
-        env_label = "💻 Local Computer"
+        env_label = "Local Computer"
 
     print(f"\n=======================================================")
-    print(f"🛣️  ROAD DAMAGE AI DETECTION SYSTEM READY")
-    print(f"🌐 Environment: {env_label}")
-    print(f"👉 Officer Portal Dashboard: {dashboard_url}")
-    print(f"👉 Mobile Camera Interface:  {mobile_url}")
+    print(f"[OK] ROAD DAMAGE AI DETECTION SYSTEM READY")
+    print(f"[OK] Environment: {env_label}")
+    print(f"[OK] Officer Portal Dashboard: {dashboard_url}")
+    print(f"[OK] Mobile Camera Interface:  {mobile_url}")
     print(f"=======================================================\n")
 
     debug_mode = os.environ.get("FLASK_DEBUG") == "1"
