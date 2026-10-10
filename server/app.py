@@ -205,24 +205,44 @@ def init_db():
 
 init_db()
 
-# Load YOLO Model (custom best.pt if available, else yolov8n.pt)
-model = None
-model_source = "None"
+# Dual AI Ensemble Models:
+# Model A: Trained on Indian Potholes, Road Holes & Cavities (potholes.pt)
+# Model B: Trained on RDD2022 Alligator, Longitudinal & Transverse Cracks (cracks.pt)
+pothole_model = None
+crack_model = None
+model_source = "Dual Ensemble AI (Indian Potholes & RDD2022 Cracks)"
 
 def load_ai_model():
-    global model, model_source
+    global pothole_model, crack_model, model_source
     from ultralytics import YOLO  # type: ignore
-    custom_model_path = MODELS_DIR / "best.pt"
-    if custom_model_path.exists():
-        print(f"✅ Loading custom trained Indian road damage model: {custom_model_path}")
-        model = YOLO(str(custom_model_path))
-        model_source = "RDD2022 AI Model (Cracks & Potholes)"
+    
+    pothole_path = MODELS_DIR / "potholes.pt"
+    crack_path = MODELS_DIR / "cracks.pt"
+    legacy_path = MODELS_DIR / "best.pt"
+
+    if pothole_path.exists():
+        print(f"✅ Loading Indian Pothole model: {pothole_path}")
+        pothole_model = YOLO(str(pothole_path))
+    elif legacy_path.exists():
+        pothole_model = YOLO(str(legacy_path))
+
+    if crack_path.exists():
+        print(f"✅ Loading RDD2022 Crack model: {crack_path}")
+        crack_model = YOLO(str(crack_path))
+    elif legacy_path.exists() and pothole_model is None:
+        crack_model = YOLO(str(legacy_path))
+
+    if pothole_model is None and crack_model is None:
+        pothole_model = YOLO("yolov8n.pt")
+        model_source = "Base YOLOv8 (Fallback)"
     else:
-        print("⚠️ models/best.pt not found yet. Loading base YOLOv8n model...")
-        model = YOLO("yolov8n.pt")
-        model_source = "Base YOLOv8 (Pending best.pt download)"
+        model_source = "Dual Ensemble AI (Potholes, Cavities & Cracks)"
+
     try:
-        model.to("cpu")
+        if pothole_model:
+            pothole_model.to("cpu")
+        if crack_model:
+            crack_model.to("cpu")
     except Exception:
         pass
     gc.collect()
@@ -401,58 +421,106 @@ def detect_damage():
         img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
         img_h, img_w = new_h, new_w
 
-    # Run inference
-    global model
-    if model is None:
+    # Run Dual AI Ensemble Inference (Indian Potholes & RDD2022 Cracks)
+    global pothole_model, crack_model
+    if pothole_model is None and crack_model is None:
         load_ai_model()
 
-    # Run inference with conf=0.20 and imgsz=416 for ultra-fast response
-    if torch is not None:
-        with torch.no_grad():
-            results = model.predict(img, conf=0.20, imgsz=416, device="cpu", verbose=False)
-    else:
-        results = model.predict(img, conf=0.20, imgsz=416, device="cpu", verbose=False)
-    
+    raw_candidates = []
+
+    # 1. Pothole & Cavity Detection
+    if pothole_model is not None:
+        try:
+            p_res = pothole_model.predict(img, conf=0.18, imgsz=416, device="cpu", verbose=False)
+            for r in p_res:
+                for box in r.boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                    conf = float(box.conf[0])
+                    cls_id = int(box.cls[0])
+                    raw_cls = pothole_model.names.get(cls_id, f"Class {cls_id}")
+                    raw_candidates.append({
+                        "raw_cls": raw_cls,
+                        "confidence": round(conf, 3),
+                        "box": [x1, y1, x2, y2]
+                    })
+        except Exception as e:
+            print(f"Pothole model predict error: {e}")
+
+    # 2. Crack & Structural Fissure Detection
+    if crack_model is not None:
+        try:
+            c_res = crack_model.predict(img, conf=0.18, imgsz=416, device="cpu", verbose=False)
+            for r in c_res:
+                for box in r.boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                    conf = float(box.conf[0])
+                    cls_id = int(box.cls[0])
+                    raw_cls = crack_model.names.get(cls_id, f"Damage {cls_id}")
+                    raw_candidates.append({
+                        "raw_cls": raw_cls,
+                        "confidence": round(conf, 3),
+                        "box": [x1, y1, x2, y2]
+                    })
+        except Exception as e:
+            print(f"Crack model predict error: {e}")
+
+    # Non-Maximum Suppression (IoU > 0.45) to merge duplicate boxes
+    raw_candidates.sort(key=lambda x: x["confidence"], reverse=True)
     detections = []
-    annotated_img = img.copy()
-
-    for r in results:
-        boxes = r.boxes
-        for box in boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-            conf = float(box.conf[0])
-            cls_id = int(box.cls[0])
-            raw_cls = model.names.get(cls_id, f"Damage {cls_id}")
-            cls_name = raw_cls.replace("_", " ").title()
-
+    for cand in raw_candidates:
+        c_box = cand["box"]
+        overlap = False
+        for kept in detections:
+            k_box = kept["box"]
+            ix1 = max(c_box[0], k_box[0])
+            iy1 = max(c_box[1], k_box[1])
+            ix2 = min(c_box[2], k_box[2])
+            iy2 = min(c_box[3], k_box[3])
+            inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+            c_area = max(0, c_box[2] - c_box[0]) * max(0, c_box[3] - c_box[1])
+            k_area = max(0, k_box[2] - k_box[0]) * max(0, k_box[3] - k_box[1])
+            union = c_area + k_area - inter
+            if union > 0 and (inter / union) > 0.45:
+                overlap = True
+                break
+        if not overlap:
+            raw_cls = cand["raw_cls"]
+            cls_name = raw_cls.replace("_", " ").replace("-", " ").strip().title()
             detections.append({
                 "class": cls_name,
-                "confidence": round(conf, 3),
-                "box": [x1, y1, x2, y2]
+                "confidence": cand["confidence"],
+                "box": cand["box"],
+                "raw_cls": raw_cls
             })
 
-            # Color coding tailored by damage type (BGR format)
-            c_low = raw_cls.lower()
-            if "pothole" in c_low or "hole" in c_low:
-                color = (0, 0, 255)       # Red: Severe cavity
-            elif "alligator" in c_low:
-                color = (0, 100, 255)     # Deep Orange: Severe structural web crack
-            elif "transverse" in c_low:
-                color = (0, 180, 255)     # Amber: Cross-lane structural crack
-            elif "longitudinal" in c_low:
-                color = (255, 170, 0)     # Cyan/Teal: Longitudinal joint crack
-            else:
-                color = (0, 200, 255)     # Gold: General road damage
+    annotated_img = img.copy()
+    for d in detections:
+        x1, y1, x2, y2 = d["box"]
+        conf = d["confidence"]
+        cls_name = d["class"]
+        c_low = d["raw_cls"].lower()
 
-            # Draw stylish bounding box
-            cv2.rectangle(annotated_img, (x1, y1), (x2, y2), color, 3)
-            
-            # Label banner
-            label = f"{cls_name} {int(conf * 100)}%"
-            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-            cv2.rectangle(annotated_img, (x1, max(0, y1 - 25)), (x1 + tw + 10, y1), color, -1)
-            cv2.putText(annotated_img, label, (x1 + 5, max(18, y1 - 6)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        # Color coding tailored by damage type (BGR format)
+        if "pothole" in c_low or "hole" in c_low:
+            color = (0, 0, 255)       # Red: Severe cavity
+        elif "alligator" in c_low:
+            color = (0, 100, 255)     # Deep Orange: Severe structural web crack
+        elif "transverse" in c_low:
+            color = (0, 180, 255)     # Amber: Cross-lane structural crack
+        elif "longitudinal" in c_low:
+            color = (255, 170, 0)     # Cyan/Teal: Longitudinal joint crack
+        else:
+            color = (0, 200, 255)     # Gold: General road damage
+
+        # Draw stylish bounding box
+        cv2.rectangle(annotated_img, (x1, y1), (x2, y2), color, 3)
+        
+        # Label banner
+        label = f"{cls_name} {int(conf * 100)}%"
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        cv2.rectangle(annotated_img, (x1, max(0, y1 - 25)), (x1 + tw + 10, y1), color, -1)
+        cv2.putText(annotated_img, label, (x1 + 5, max(18, y1 - 6)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     # Save annotated image
     cv2.imwrite(str(annotated_path), annotated_img)
