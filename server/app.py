@@ -455,7 +455,9 @@ def detect_damage():
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
                     conf = float(box.conf[0])
                     cls_id = int(box.cls[0])
-                    raw_cls = crack_model.names.get(cls_id, f"Damage {cls_id}")
+                    raw_cls = crack_model.names.get(cls_id, "crack")
+                    if "background" in raw_cls.lower():
+                        continue
                     raw_candidates.append({
                         "raw_cls": raw_cls,
                         "confidence": round(conf, 3),
@@ -625,13 +627,15 @@ def detect_live_frame():
 
     if crack_model is not None:
         try:
-            c_res = crack_model.predict(img, conf=0.20, imgsz=384, device="cpu", verbose=False)
+            c_res = crack_model.predict(img, conf=0.18, imgsz=384, device="cpu", verbose=False)
             for r in c_res:
                 for box in r.boxes:
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
                     conf = float(box.conf[0])
                     cls_id = int(box.cls[0])
-                    raw_cls = crack_model.names.get(cls_id, f"Damage {cls_id}")
+                    raw_cls = crack_model.names.get(cls_id, "crack")
+                    if "background" in raw_cls.lower():
+                        continue
                     raw_candidates.append({
                         "raw_cls": raw_cls,
                         "confidence": round(conf, 2),

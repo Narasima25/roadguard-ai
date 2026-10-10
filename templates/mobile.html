@@ -925,13 +925,16 @@
         </div>
       </div>
 
-      <!-- Fallback Tap-to-Snap Splash (if live stream idle) -->
-      <div class="viewfinder-splash" id="viewfinder-splash" onclick="triggerCameraCapture()">
-        <span class="splash-icon">📸</span>
-        <p style="font-weight: 800; font-size: 16px; color: #f8fafc;">Tap to Launch Camera</p>
-        <p style="font-size: 12px; color: #94a3b8; max-width: 260px;">
-          Opens full-resolution phone camera with native auto-focus and zoom.
+      <!-- Live Camera Stream Activation Splash -->
+      <div class="viewfinder-splash" id="viewfinder-splash" onclick="startLiveCameraScanner()">
+        <span class="splash-icon">📹</span>
+        <p style="font-weight: 800; font-size: 16px; color: #f8fafc;">Start Live Camera Radar</p>
+        <p style="font-size: 12px; color: #94a3b8; max-width: 270px; margin-bottom: 12px;">
+          Tap to start live camera video with real-time AI bounding boxes tracking potholes and cracks.
         </p>
+        <button class="btn-sheet-action primary" style="max-width: 200px; font-size: 13px; padding: 10px 16px;" onclick="event.stopPropagation(); startLiveCameraScanner();">
+          ▶ Start Live Camera
+        </button>
       </div>
     </div>
 
@@ -940,10 +943,10 @@
       
       <!-- Primary Shutter Button -->
       <div class="shutter-row">
-        <button class="btn-gallery-pick" onclick="triggerCameraCapture()" title="Open Camera / Gallery">
+        <button class="btn-gallery-pick" onclick="triggerCameraCapture()" title="Open Gallery / Photos">
           📁
         </button>
-        <button class="btn-shutter" onclick="triggerCameraCapture()">
+        <button class="btn-shutter" onclick="handleShutterPress()">
           📸 Snap Road Damage
         </button>
       </div>
@@ -2030,27 +2033,87 @@
     let liveAiInterval = null;
     let activeLiveDetections = [];
 
-    async function initLiveStreamIfSecure() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    async function startLiveCameraScanner() {
+      triggerHaptic();
+      const video = document.getElementById('camera-video');
+      const splash = document.getElementById('viewfinder-splash');
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('⚠️ Live camera stream not supported. Using photo snap.');
+        triggerCameraCapture();
+        return;
+      }
+
       try {
+        showToast('📹 Accessing camera feed...');
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
           audio: false
         });
-        const video = document.getElementById('camera-video');
         video.srcObject = stream;
+        video.setAttribute('playsinline', '');
+        video.setAttribute('autoplay', '');
+        video.setAttribute('muted', '');
         video.style.display = 'block';
-        document.getElementById('viewfinder-splash').style.display = 'none';
+        if (splash) splash.style.display = 'none';
 
-        // Auto-start live AI scan once video stream flows
-        video.onloadedmetadata = () => {
-          setTimeout(() => {
-            if (!liveAiActive) startLiveAiScan();
-          }, 600);
-        };
-      } catch (e) {
-        console.warn('Live stream initialization skipped:', e);
+        try {
+          await video.play();
+        } catch (playErr) {
+          console.warn('Video play triggered:', playErr);
+        }
+
+        startLiveAiScan();
+        showToast('⚡ Live AI Camera Radar Active!');
+      } catch (err) {
+        console.error('Camera stream access failed:', err);
+        showToast('⚠️ Camera permission denied. Opening photo picker...');
+        triggerCameraCapture();
       }
+    }
+
+    function handleShutterPress() {
+      triggerHaptic();
+      const video = document.getElementById('camera-video');
+      // If live camera is actively streaming on screen, grab the frame directly!
+      if (video && video.srcObject && video.videoWidth > 0 && !video.paused) {
+        captureFrameFromLiveStream();
+      } else {
+        triggerCameraCapture();
+      }
+    }
+
+    function captureFrameFromLiveStream() {
+      const video = document.getElementById('camera-video');
+      const offCanvas = document.createElement('canvas');
+      const vw = video.videoWidth || 1280;
+      const vh = video.videoHeight || 720;
+      const maxDim = 1024;
+      let w = vw;
+      let h = vh;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+        else { w = Math.round((w * maxDim) / h); h = maxDim; }
+      }
+      offCanvas.width = w;
+      offCanvas.height = h;
+      const ctx = offCanvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, w, h);
+      offCanvas.toBlob((blob) => {
+        if (!blob) return;
+        selectedFile = new File([blob], "live_snap.jpg", { type: "image/jpeg" });
+        const previewUrl = URL.createObjectURL(selectedFile);
+        document.getElementById('preview-img').src = previewUrl;
+        document.getElementById('preview-card').style.display = 'block';
+        document.getElementById('result-sheet').style.display = 'none';
+        document.getElementById('preview-card').scrollIntoView({ behavior: 'smooth' });
+        showToast('📷 Frame snapped! Running AI Inspection...');
+        uploadAndRunInference();
+      }, 'image/jpeg', 0.85);
+    }
+
+    async function initLiveStreamIfSecure() {
+      // Background check without popping permission prematurely
     }
 
     function toggleLiveAiScan() {
@@ -2061,15 +2124,8 @@
         stopLiveAiScan();
         showToast('⏹️ Live AI Radar paused');
       } else {
-        if (!video.srcObject) {
-          initLiveStreamIfSecure().then(() => {
-            if (video.srcObject) {
-              startLiveAiScan();
-              showToast('⚡ Live Real-Time AI Radar Active');
-            } else {
-              showToast('⚠️ Grant camera permission to view live feed');
-            }
-          });
+        if (!video.srcObject || video.paused) {
+          startLiveCameraScanner();
         } else {
           startLiveAiScan();
           showToast('⚡ Live Real-Time AI Radar Active');
