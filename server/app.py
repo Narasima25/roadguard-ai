@@ -582,6 +582,102 @@ def detect_damage():
         "detections": detections
     })
 
+@app.route("/api/detect/live", methods=["POST"])
+def detect_live_frame():
+    """
+    Ultra-lightweight endpoint for real-time live camera HUD scanning.
+    Performs in-memory inference without disk writes for <80ms response times.
+    Returns normalized bounding boxes [0.0 to 1.0] for direct overlay rendering.
+    """
+    if "image" not in request.files:
+        return jsonify({"success": False, "detections": []}), 400
+
+    image_file = request.files["image"]
+    file_bytes = np.frombuffer(image_file.read(), np.uint8)
+    img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    if img is None:
+        return jsonify({"success": False, "detections": []}), 400
+
+    img_h, img_w = img.shape[:2]
+
+    global pothole_model, crack_model
+    if pothole_model is None and crack_model is None:
+        load_ai_model()
+
+    raw_candidates = []
+
+    if pothole_model is not None:
+        try:
+            p_res = pothole_model.predict(img, conf=0.20, imgsz=384, device="cpu", verbose=False)
+            for r in p_res:
+                for box in r.boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                    conf = float(box.conf[0])
+                    cls_id = int(box.cls[0])
+                    raw_cls = pothole_model.names.get(cls_id, f"Class {cls_id}")
+                    raw_candidates.append({
+                        "raw_cls": raw_cls,
+                        "confidence": round(conf, 2),
+                        "box": [round(x1 / img_w, 4), round(y1 / img_h, 4), round(x2 / img_w, 4), round(y2 / img_h, 4)]
+                    })
+        except Exception:
+            pass
+
+    if crack_model is not None:
+        try:
+            c_res = crack_model.predict(img, conf=0.20, imgsz=384, device="cpu", verbose=False)
+            for r in c_res:
+                for box in r.boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                    conf = float(box.conf[0])
+                    cls_id = int(box.cls[0])
+                    raw_cls = crack_model.names.get(cls_id, f"Damage {cls_id}")
+                    raw_candidates.append({
+                        "raw_cls": raw_cls,
+                        "confidence": round(conf, 2),
+                        "box": [round(x1 / img_w, 4), round(y1 / img_h, 4), round(x2 / img_w, 4), round(y2 / img_h, 4)]
+                    })
+        except Exception:
+            pass
+
+    # Non-Maximum Suppression to merge duplicate boxes
+    raw_candidates.sort(key=lambda x: x["confidence"], reverse=True)
+    detections = []
+    for cand in raw_candidates:
+        c_box = cand["box"]
+        overlap = False
+        for kept in detections:
+            k_box = kept["box"]
+            ix1 = max(c_box[0], k_box[0])
+            iy1 = max(c_box[1], k_box[1])
+            ix2 = min(c_box[2], k_box[2])
+            iy2 = min(c_box[3], k_box[3])
+            inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+            c_area = max(0, c_box[2] - c_box[0]) * max(0, c_box[3] - c_box[1])
+            k_area = max(0, k_box[2] - k_box[0]) * max(0, k_box[3] - k_box[1])
+            union = c_area + k_area - inter
+            if union > 0 and (inter / union) > 0.45:
+                overlap = True
+                break
+        if not overlap:
+            raw_cls = cand["raw_cls"]
+            cls_name = raw_cls.replace("_", " ").replace("-", " ").strip().title()
+            detections.append({
+                "class": cls_name,
+                "confidence": cand["confidence"],
+                "box": cand["box"],
+                "raw_cls": raw_cls
+            })
+
+    del img
+    gc.collect()
+
+    return jsonify({
+        "success": True,
+        "count": len(detections),
+        "detections": detections
+    })
+
 # ========================================================
 # GEO SERVICES (Proxy endpoints to bypass Render CORS & 403)
 # ========================================================

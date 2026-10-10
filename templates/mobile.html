@@ -212,6 +212,16 @@
       display: none;
     }
 
+    #live-hud-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+
     /* High-Tech HUD Reticle Overlay */
     .hud-overlay {
       position: absolute;
@@ -888,7 +898,8 @@
     
     <!-- Viewfinder Area -->
     <div class="viewfinder-wrapper">
-      <video id="camera-video" autoplay playsinline></video>
+      <video id="camera-video" autoplay playsinline muted></video>
+      <canvas id="live-hud-canvas"></canvas>
       <canvas id="camera-canvas" style="display:none;"></canvas>
 
       <!-- Laser Scanner Animation Overlay -->
@@ -897,7 +908,7 @@
       <!-- High-Tech HUD Viewfinder Graphic -->
       <div class="hud-overlay">
         <div class="hud-top-meta">
-          <span>YOLOv8 MODEL: INDIAN ROAD DAMAGE</span>
+          <span id="live-ai-status-label">YOLOv8 DUAL ENSEMBLE AI</span>
           <span id="hud-accuracy-disp">ACC: LOCATING</span>
         </div>
 
@@ -937,8 +948,11 @@
         </button>
       </div>
 
-      <!-- Quick Location Controls -->
+      <!-- Quick Location & Live AI Controls -->
       <div class="quick-chips-row">
+        <button class="chip-btn" id="chip-live-ai-btn" onclick="toggleLiveAiScan()" style="border-color: #34d399; color: #34d399; font-weight: 700;">
+          ⚡ Live AI Scan: OFF
+        </button>
         <button class="chip-btn active" id="chip-gps-btn" onclick="acquireLocation(true)">
           🛰️ My Live GPS
         </button>
@@ -2010,9 +2024,14 @@
       }
     }
 
-    // 15. Optional Live Video Stream in Secure Contexts
+    // 15. Real-Time Live AI Camera Radar Loop
+    let liveAiActive = false;
+    let liveAiBusy = false;
+    let liveAiInterval = null;
+    let activeLiveDetections = [];
+
     async function initLiveStreamIfSecure() {
-      if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
@@ -2022,9 +2041,204 @@
         video.srcObject = stream;
         video.style.display = 'block';
         document.getElementById('viewfinder-splash').style.display = 'none';
+
+        // Auto-start live AI scan once video stream flows
+        video.onloadedmetadata = () => {
+          setTimeout(() => {
+            if (!liveAiActive) startLiveAiScan();
+          }, 600);
+        };
       } catch (e) {
-        // Fallback splash remains active
+        console.warn('Live stream initialization skipped:', e);
       }
+    }
+
+    function toggleLiveAiScan() {
+      triggerHaptic();
+      const video = document.getElementById('camera-video');
+
+      if (liveAiActive) {
+        stopLiveAiScan();
+        showToast('⏹️ Live AI Radar paused');
+      } else {
+        if (!video.srcObject) {
+          initLiveStreamIfSecure().then(() => {
+            if (video.srcObject) {
+              startLiveAiScan();
+              showToast('⚡ Live Real-Time AI Radar Active');
+            } else {
+              showToast('⚠️ Grant camera permission to view live feed');
+            }
+          });
+        } else {
+          startLiveAiScan();
+          showToast('⚡ Live Real-Time AI Radar Active');
+        }
+      }
+    }
+
+    function startLiveAiScan() {
+      liveAiActive = true;
+      const chipBtn = document.getElementById('chip-live-ai-btn');
+      if (chipBtn) {
+        chipBtn.classList.add('active');
+        chipBtn.innerText = '⚡ Live AI: ACTIVE';
+        chipBtn.style.background = 'rgba(52, 211, 153, 0.2)';
+        chipBtn.style.color = '#34d399';
+        chipBtn.style.borderColor = '#34d399';
+      }
+      const statusLabel = document.getElementById('live-ai-status-label');
+      if (statusLabel) {
+        statusLabel.innerText = '⚡ LIVE RADAR: SCANNING';
+        statusLabel.style.color = '#34d399';
+      }
+
+      clearInterval(liveAiInterval);
+      liveAiInterval = setInterval(runLiveAiFrame, 450);
+    }
+
+    function stopLiveAiScan() {
+      liveAiActive = false;
+      clearInterval(liveAiInterval);
+      liveAiInterval = null;
+      activeLiveDetections = [];
+      clearLiveHudCanvas();
+
+      const chipBtn = document.getElementById('chip-live-ai-btn');
+      if (chipBtn) {
+        chipBtn.classList.remove('active');
+        chipBtn.innerText = '⚡ Live AI: OFF';
+        chipBtn.style.background = '';
+        chipBtn.style.color = '#34d399';
+        chipBtn.style.borderColor = '#34d399';
+      }
+      const statusLabel = document.getElementById('live-ai-status-label');
+      if (statusLabel) {
+        statusLabel.innerText = 'YOLOv8 DUAL ENSEMBLE AI';
+        statusLabel.style.color = '';
+      }
+    }
+
+    async function runLiveAiFrame() {
+      if (!liveAiActive || liveAiBusy) return;
+      const video = document.getElementById('camera-video');
+      if (!video || video.readyState < 2 || video.paused || video.ended) return;
+
+      liveAiBusy = true;
+      try {
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = 384;
+        offCanvas.height = 384;
+        const ctx = offCanvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, 384, 384);
+
+        offCanvas.toBlob(async (blob) => {
+          if (!blob) { liveAiBusy = false; return; }
+          const fd = new FormData();
+          fd.append('image', blob, 'frame.jpg');
+
+          try {
+            const res = await fetch('/api/detect/live', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data && data.success && liveAiActive) {
+              activeLiveDetections = data.detections || [];
+              drawLiveHudOverlay(activeLiveDetections);
+              const statusLabel = document.getElementById('live-ai-status-label');
+              if (activeLiveDetections.length > 0) {
+                triggerHaptic();
+                const top = activeLiveDetections[0];
+                if (statusLabel) {
+                  statusLabel.innerText = `⚠️ ${top.class.toUpperCase()} (${Math.round(top.confidence * 100)}%)`;
+                  statusLabel.style.color = '#f87171';
+                }
+              } else if (statusLabel) {
+                statusLabel.innerText = '⚡ LIVE RADAR: SCANNING (ROAD CLEAR)';
+                statusLabel.style.color = '#34d399';
+              }
+            }
+          } catch (e) {
+            console.warn('Live AI frame error:', e);
+          } finally {
+            liveAiBusy = false;
+          }
+        }, 'image/jpeg', 0.6);
+      } catch (e) {
+        liveAiBusy = false;
+      }
+    }
+
+    function clearLiveHudCanvas() {
+      const canvas = document.getElementById('live-hud-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function drawLiveHudOverlay(detections) {
+      const canvas = document.getElementById('live-hud-canvas');
+      const video = document.getElementById('camera-video');
+      if (!canvas || !video) return;
+
+      const rect = video.getBoundingClientRect();
+      if (canvas.width !== rect.width || canvas.height !== rect.height) {
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+      }
+
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (!detections || detections.length === 0) return;
+
+      detections.forEach(d => {
+        const [nx1, ny1, nx2, ny2] = d.box;
+        const x1 = nx1 * canvas.width;
+        const y1 = ny1 * canvas.height;
+        const w = (nx2 - nx1) * canvas.width;
+        const h = (ny2 - ny1) * canvas.height;
+
+        let strokeColor = '#38bdf8';
+        let fillColor = 'rgba(56, 189, 248, 0.15)';
+        const cLow = (d.raw_cls || '').toLowerCase();
+
+        if (cLow.includes('pothole') || cLow.includes('hole')) {
+          strokeColor = '#ef4444'; // Red
+          fillColor = 'rgba(239, 68, 68, 0.18)';
+        } else if (cLow.includes('alligator')) {
+          strokeColor = '#f97316'; // Orange
+          fillColor = 'rgba(249, 115, 22, 0.18)';
+        } else if (cLow.includes('transverse') || cLow.includes('longitudinal') || cLow.includes('crack')) {
+          strokeColor = '#eab308'; // Amber
+          fillColor = 'rgba(234, 179, 8, 0.18)';
+        }
+
+        ctx.fillStyle = fillColor;
+        ctx.fillRect(x1, y1, w, h);
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(x1, y1, w, h);
+
+        const blen = Math.min(18, w / 3, h / 3);
+        ctx.lineWidth = 3.5;
+        ctx.beginPath(); ctx.moveTo(x1, y1 + blen); ctx.lineTo(x1, y1); ctx.lineTo(x1 + blen, y1); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1); ctx.lineTo(x1 + w, y1); ctx.lineTo(x1 + w, y1 + blen); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x1, y1 + h - blen); ctx.lineTo(x1, y1 + h); ctx.lineTo(x1 + blen, y1 + h); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1 + h); ctx.lineTo(x1 + w, y1 + h); ctx.lineTo(x1 + w, y1 + h - blen); ctx.stroke();
+
+        const tagText = `${d.class} ${Math.round(d.confidence * 100)}%`;
+        ctx.font = 'bold 11px sans-serif';
+        const tWidth = ctx.measureText(tagText).width;
+        const tagH = 18;
+        const tagY = Math.max(0, y1 - tagH - 4);
+
+        ctx.fillStyle = strokeColor;
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(x1, tagY, tWidth + 12, tagH, 4) : ctx.rect(x1, tagY, tWidth + 12, tagH);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(tagText, x1 + 6, tagY + 13);
+      });
     }
 
     // 16. Page Load Initializer
