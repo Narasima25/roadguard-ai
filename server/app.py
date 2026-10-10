@@ -528,7 +528,14 @@ def detect_damage():
     # Clean up large OpenCV & PyTorch buffers immediately
     del annotated_img
     del img
-    del results
+    try:
+        del p_res
+    except Exception:
+        pass
+    try:
+        del c_res
+    except Exception:
+        pass
     gc.collect()
 
     # Compute Priority & Severity
