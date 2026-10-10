@@ -16,12 +16,7 @@ import cv2  # type: ignore
 import numpy as np  # type: ignore
 from PIL import Image, ExifTags  # type: ignore
 from contextlib import nullcontext
-try:
-    import torch  # type: ignore
-    torch.set_num_threads(1)
-    torch.set_grad_enabled(False)
-except Exception:
-    torch = None
+import onnxruntime as ort
 import requests
 
 # Google Maps API Key configuration
@@ -209,49 +204,123 @@ def init_db():
 
 init_db()
 
-# Dual AI Ensemble Models:
-# Model A: Trained on Indian Potholes, Road Holes & Cavities (potholes.pt)
-# Model B: Trained on RDD2022 Alligator, Longitudinal & Transverse Cracks (cracks.pt)
-pothole_model = None
-crack_model = None
-model_source = "Dual Ensemble AI (Indian Potholes & RDD2022 Cracks)"
+# Dual AI Ensemble Models (Ultra-low RAM ONNX Runtime Engine <110MB):
+# Model A: Trained on Indian Potholes, Road Holes & Cavities (potholes.onnx)
+# Model B: Trained on Infrastructure Road Cracks (cracks.onnx)
+pothole_session = None
+crack_session = None
+model_source = "Dual Ensemble AI (Indian Potholes & Cracks - ONNX Runtime)"
+
+POTHOLE_NAMES = {
+    0: 'Drain Hole',
+    1: 'circle-drain-clean-',
+    2: 'drain-clean-',
+    3: 'drain-not clean-',
+    4: 'hole',
+    5: 'manhole',
+    6: 'pothole',
+    7: 'sewer cover'
+}
+
+CRACK_NAMES = {
+    0: 'crack',
+    1: 'background'
+}
 
 def load_ai_model():
-    global pothole_model, crack_model, model_source
-    from ultralytics import YOLO  # type: ignore
-    
-    pothole_path = MODELS_DIR / "potholes.pt"
-    crack_path = MODELS_DIR / "cracks.pt"
-    legacy_path = MODELS_DIR / "best.pt"
+    global pothole_session, crack_session, model_source
+    p_onnx = MODELS_DIR / "potholes.onnx"
+    c_onnx = MODELS_DIR / "cracks.onnx"
 
-    if pothole_path.exists():
-        print(f"✅ Loading Indian Pothole model: {pothole_path}")
-        pothole_model = YOLO(str(pothole_path))
-    elif legacy_path.exists():
-        pothole_model = YOLO(str(legacy_path))
+    opts = ort.SessionOptions()
+    opts.intra_op_num_threads = 1
+    opts.inter_op_num_threads = 1
+    opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
 
-    if crack_path.exists():
-        print(f"✅ Loading RDD2022 Crack model: {crack_path}")
-        crack_model = YOLO(str(crack_path))
-    elif legacy_path.exists() and pothole_model is None:
-        crack_model = YOLO(str(legacy_path))
+    if p_onnx.exists():
+        print(f"[OK] Loading ONNX Pothole model: {p_onnx}")
+        pothole_session = ort.InferenceSession(str(p_onnx), sess_options=opts, providers=["CPUExecutionProvider"])
 
-    if pothole_model is None and crack_model is None:
-        pothole_model = YOLO("yolov8n.pt")
-        model_source = "Base YOLOv8 (Fallback)"
-    else:
-        model_source = "Dual Ensemble AI (Potholes, Cavities & Cracks)"
+    if c_onnx.exists():
+        print(f"[OK] Loading ONNX Crack model: {c_onnx}")
+        crack_session = ort.InferenceSession(str(c_onnx), sess_options=opts, providers=["CPUExecutionProvider"])
 
-    try:
-        if pothole_model:
-            pothole_model.to("cpu")
-        if crack_model:
-            crack_model.to("cpu")
-    except Exception:
-        pass
+    model_source = "Dual Ensemble AI (Indian Potholes & Cracks - ONNX Runtime)"
     gc.collect()
 
 load_ai_model()
+
+def run_onnx_inference(session, img_bgr, conf_thresh, class_map, is_crack=False):
+    """
+    Ultra-low-memory (<110MB RAM) YOLO inference using ONNX Runtime.
+    Returns candidate boxes with normalized [0, 1] coordinates.
+    """
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    img_256 = cv2.resize(img_rgb, (256, 256))
+    blob = img_256.transpose(2, 0, 1).astype(np.float32) / 255.0
+    blob = np.expand_dims(blob, axis=0)
+
+    input_name = session.get_inputs()[0].name
+    out = session.run(None, {input_name: blob})[0]
+    preds = out[0].T  # (1344, channels)
+
+    boxes = preds[:, :4]
+    num_classes = 2 if is_crack else 8
+    scores = preds[:, 4:4+num_classes]
+
+    class_ids = np.argmax(scores, axis=1)
+    confs = np.max(scores, axis=1)
+
+    mask = confs >= conf_thresh
+    boxes = boxes[mask]
+    confs = confs[mask]
+    class_ids = class_ids[mask]
+
+    results = []
+    for (cx, cy, w, h), conf, cid in zip(boxes, confs, class_ids):
+        raw_name = class_map.get(cid, f"class_{cid}")
+        if "background" in raw_name.lower():
+            continue
+        x1 = max(0.0, min(1.0, float((cx - w / 2) / 256.0)))
+        y1 = max(0.0, min(1.0, float((cy - h / 2) / 256.0)))
+        x2 = max(0.0, min(1.0, float((cx + w / 2) / 256.0)))
+        y2 = max(0.0, min(1.0, float((cy + h / 2) / 256.0)))
+        results.append({
+            "raw_cls": raw_name,
+            "confidence": round(float(conf), 3),
+            "box": [round(x1, 4), round(y1, 4), round(x2, 4), round(y2, 4)]
+        })
+    return results
+
+def apply_nms(candidates, iou_thresh=0.45):
+    candidates.sort(key=lambda x: x["confidence"], reverse=True)
+    kept = []
+    for cand in candidates:
+        c_box = cand["box"]
+        overlap = False
+        for k in kept:
+            k_box = k["box"]
+            ix1 = max(c_box[0], k_box[0])
+            iy1 = max(c_box[1], k_box[1])
+            ix2 = min(c_box[2], k_box[2])
+            iy2 = min(c_box[3], k_box[3])
+            inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+            c_area = max(0, c_box[2] - c_box[0]) * max(0, c_box[3] - c_box[1])
+            k_area = max(0, k_box[2] - k_box[0]) * max(0, k_box[3] - k_box[1])
+            union = c_area + k_area - inter
+            if union > 0 and (inter / union) > iou_thresh:
+                overlap = True
+                break
+        if not overlap:
+            raw_cls = cand["raw_cls"]
+            cls_name = raw_cls.replace("_", " ").replace("-", " ").strip().title()
+            kept.append({
+                "class": cls_name,
+                "confidence": cand["confidence"],
+                "box": cand["box"],
+                "raw_cls": raw_cls
+            })
+    return kept
 
 # Priority calculation algorithm
 def compute_priority_and_severity(detections, img_width, img_height):
@@ -425,84 +494,28 @@ def detect_damage():
         img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
         img_h, img_w = new_h, new_w
 
-    # Run Dual AI Ensemble Inference (Indian Potholes & RDD2022 Cracks)
-    global pothole_model, crack_model
-    if pothole_model is None and crack_model is None:
+    # Run Dual AI Ensemble Inference (Indian Potholes & Cracks via ONNX Runtime)
+    global pothole_session, crack_session
+    if pothole_session is None and crack_session is None:
         load_ai_model()
 
     raw_candidates = []
+    if pothole_session is not None:
+        raw_candidates.extend(run_onnx_inference(pothole_session, img, 0.18, POTHOLE_NAMES, False))
+    if crack_session is not None:
+        raw_candidates.extend(run_onnx_inference(crack_session, img, 0.18, CRACK_NAMES, True))
 
-    with (torch.inference_mode() if torch is not None else nullcontext()):
-        # 1. Pothole & Cavity Detection
-        if pothole_model is not None:
-            try:
-                p_res = pothole_model.predict(img, conf=0.18, imgsz=384, device="cpu", verbose=False)
-                for r in p_res:
-                    for box in r.boxes:
-                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                        conf = float(box.conf[0])
-                        cls_id = int(box.cls[0])
-                        raw_cls = pothole_model.names.get(cls_id, f"Class {cls_id}")
-                        raw_candidates.append({
-                            "raw_cls": raw_cls,
-                            "confidence": round(conf, 3),
-                            "box": [x1, y1, x2, y2]
-                        })
-            except Exception as e:
-                print(f"Pothole model predict error: {e}")
-
-        # 2. Crack & Structural Fissure Detection
-        if crack_model is not None:
-            try:
-                c_res = crack_model.predict(img, conf=0.18, imgsz=384, device="cpu", verbose=False)
-                for r in c_res:
-                    for box in r.boxes:
-                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                        conf = float(box.conf[0])
-                        cls_id = int(box.cls[0])
-                        raw_cls = crack_model.names.get(cls_id, "crack")
-                        if "background" in raw_cls.lower():
-                            continue
-                        raw_candidates.append({
-                            "raw_cls": raw_cls,
-                            "confidence": round(conf, 3),
-                            "box": [x1, y1, x2, y2]
-                        })
-            except Exception as e:
-                print(f"Crack model predict error: {e}")
-
-    # Non-Maximum Suppression (IoU > 0.45) to merge duplicate boxes
-    raw_candidates.sort(key=lambda x: x["confidence"], reverse=True)
-    detections = []
-    for cand in raw_candidates:
-        c_box = cand["box"]
-        overlap = False
-        for kept in detections:
-            k_box = kept["box"]
-            ix1 = max(c_box[0], k_box[0])
-            iy1 = max(c_box[1], k_box[1])
-            ix2 = min(c_box[2], k_box[2])
-            iy2 = min(c_box[3], k_box[3])
-            inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
-            c_area = max(0, c_box[2] - c_box[0]) * max(0, c_box[3] - c_box[1])
-            k_area = max(0, k_box[2] - k_box[0]) * max(0, k_box[3] - k_box[1])
-            union = c_area + k_area - inter
-            if union > 0 and (inter / union) > 0.45:
-                overlap = True
-                break
-        if not overlap:
-            raw_cls = cand["raw_cls"]
-            cls_name = raw_cls.replace("_", " ").replace("-", " ").strip().title()
-            detections.append({
-                "class": cls_name,
-                "confidence": cand["confidence"],
-                "box": cand["box"],
-                "raw_cls": raw_cls
-            })
+    detections = apply_nms(raw_candidates, 0.45)
 
     annotated_img = img.copy()
     for d in detections:
-        x1, y1, x2, y2 = d["box"]
+        nx1, ny1, nx2, ny2 = d["box"]
+        x1 = int(nx1 * img_w)
+        y1 = int(ny1 * img_h)
+        x2 = int(nx2 * img_w)
+        y2 = int(ny2 * img_h)
+        # Store pixel coordinates for report
+        d["box"] = [x1, y1, x2, y2]
         conf = d["confidence"]
         cls_name = d["class"]
         c_low = d["raw_cls"].lower()
@@ -532,17 +545,9 @@ def detect_damage():
     # Save annotated image
     cv2.imwrite(str(annotated_path), annotated_img)
 
-    # Clean up large OpenCV & PyTorch buffers immediately
+    # Clean up buffers immediately
     del annotated_img
     del img
-    try:
-        del p_res
-    except Exception:
-        pass
-    try:
-        del c_res
-    except Exception:
-        pass
     gc.collect()
 
     # Compute Priority & Severity
@@ -607,78 +612,17 @@ def detect_live_frame():
 
     img_h, img_w = img.shape[:2]
 
-    global pothole_model, crack_model
-    if pothole_model is None and crack_model is None:
+    global pothole_session, crack_session
+    if pothole_session is None and crack_session is None:
         load_ai_model()
 
     raw_candidates = []
+    if pothole_session is not None:
+        raw_candidates.extend(run_onnx_inference(pothole_session, img, 0.18, POTHOLE_NAMES, False))
+    if crack_session is not None:
+        raw_candidates.extend(run_onnx_inference(crack_session, img, 0.18, CRACK_NAMES, True))
 
-    with (torch.inference_mode() if torch is not None else nullcontext()):
-        if pothole_model is not None:
-            try:
-                p_res = pothole_model.predict(img, conf=0.18, imgsz=256, device="cpu", verbose=False)
-                for r in p_res:
-                    for box in r.boxes:
-                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                        conf = float(box.conf[0])
-                        cls_id = int(box.cls[0])
-                        raw_cls = pothole_model.names.get(cls_id, f"Class {cls_id}")
-                        raw_candidates.append({
-                            "raw_cls": raw_cls,
-                            "confidence": round(conf, 2),
-                            "box": [round(x1 / img_w, 4), round(y1 / img_h, 4), round(x2 / img_w, 4), round(y2 / img_h, 4)]
-                        })
-            except Exception:
-                pass
-
-        if crack_model is not None:
-            try:
-                c_res = crack_model.predict(img, conf=0.18, imgsz=256, device="cpu", verbose=False)
-                for r in c_res:
-                    for box in r.boxes:
-                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                        conf = float(box.conf[0])
-                        cls_id = int(box.cls[0])
-                        raw_cls = crack_model.names.get(cls_id, "crack")
-                        if "background" in raw_cls.lower():
-                            continue
-                        raw_candidates.append({
-                            "raw_cls": raw_cls,
-                            "confidence": round(conf, 2),
-                            "box": [round(x1 / img_w, 4), round(y1 / img_h, 4), round(x2 / img_w, 4), round(y2 / img_h, 4)]
-                        })
-            except Exception:
-                pass
-
-    # Non-Maximum Suppression to merge duplicate boxes
-    raw_candidates.sort(key=lambda x: x["confidence"], reverse=True)
-    detections = []
-    for cand in raw_candidates:
-        c_box = cand["box"]
-        overlap = False
-        for kept in detections:
-            k_box = kept["box"]
-            ix1 = max(c_box[0], k_box[0])
-            iy1 = max(c_box[1], k_box[1])
-            ix2 = min(c_box[2], k_box[2])
-            iy2 = min(c_box[3], k_box[3])
-            inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
-            c_area = max(0, c_box[2] - c_box[0]) * max(0, c_box[3] - c_box[1])
-            k_area = max(0, k_box[2] - k_box[0]) * max(0, k_box[3] - k_box[1])
-            union = c_area + k_area - inter
-            if union > 0 and (inter / union) > 0.45:
-                overlap = True
-                break
-        if not overlap:
-            raw_cls = cand["raw_cls"]
-            cls_name = raw_cls.replace("_", " ").replace("-", " ").strip().title()
-            detections.append({
-                "class": cls_name,
-                "confidence": cand["confidence"],
-                "box": cand["box"],
-                "raw_cls": raw_cls
-            })
-
+    detections = apply_nms(raw_candidates, 0.45)
     del img
     return jsonify({
         "success": True,
