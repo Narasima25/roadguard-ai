@@ -167,6 +167,8 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 app = Flask(__name__, template_folder=str(TEMPLATES_DIR), static_folder=str(STATIC_DIR))
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.jinja_env.auto_reload = True
 CORS(app)
 
 # Database Setup
@@ -635,11 +637,11 @@ def detect_live_frame():
 
     raw_candidates = []
     if pothole_session is not None:
-        raw_candidates.extend(run_onnx_inference(pothole_session, img, 0.18, POTHOLE_NAMES, False))
+        raw_candidates.extend(run_onnx_inference(pothole_session, img, 0.15, POTHOLE_NAMES, False))
     if crack_session is not None:
-        raw_candidates.extend(run_onnx_inference(crack_session, img, 0.18, CRACK_NAMES, True))
+        raw_candidates.extend(run_onnx_inference(crack_session, img, 0.15, CRACK_NAMES, True))
 
-    detections = apply_nms(raw_candidates, 0.45)
+    detections = apply_nms(raw_candidates, 0.40)
     del img
     return jsonify({
         "success": True,

@@ -1201,6 +1201,15 @@
           <button class="chip-btn" id="chip-live-ai-btn" onclick="toggleLiveAiScan()" style="border-color: #10b981; color: #059669; font-weight: 700;">
             ⚡ Live AI Scan: OFF
           </button>
+          <button class="chip-btn" id="chip-sim-live-btn" onclick="toggleSimulateLiveDefect()" style="border-color: #8b5cf6; color: #7c3aed; font-weight: 700;">
+            🧪 Live Sim: OFF
+          </button>
+          <button class="chip-btn" onclick="testSampleDefectInspection('pothole')" style="border-color: #dc2626; color: #dc2626; font-weight: 700;">
+            🕳️ Test Pothole
+          </button>
+          <button class="chip-btn" onclick="testSampleDefectInspection('crack')" style="border-color: #2563eb; color: #2563eb; font-weight: 700;">
+            🛣️ Test Crack
+          </button>
           <button class="chip-btn active" id="chip-gps-btn" onclick="acquireLocation(true)">
             🛰️ My Live GPS
           </button>
@@ -2468,23 +2477,86 @@
 
     let liveFrameCount = 0;
     let liveLastFpsTime = performance.now();
-    let liveFpsCurrent = 16;
+    let liveFpsCurrent = 18;
+    let persistentDetections = [];
+    let persistExpiryTime = 0;
+    let simulateLiveDefectActive = false;
+    let simDefectImg = null;
+    let simToggleIndex = 0;
+
+    function toggleSimulateLiveDefect() {
+      triggerHaptic();
+      simulateLiveDefectActive = !simulateLiveDefectActive;
+      const simBtn = document.getElementById('chip-sim-live-btn');
+      if (simulateLiveDefectActive) {
+        if (!simDefectImg) {
+          simDefectImg = new Image();
+          simDefectImg.src = '/uploads/pothole_demo.jpg';
+        }
+        if (simBtn) {
+          simBtn.classList.add('active');
+          simBtn.innerText = '🧪 Live Sim: ON';
+          simBtn.style.background = '#f5f3ff';
+          simBtn.style.color = '#7c3aed';
+          simBtn.style.borderColor = '#8b5cf6';
+        }
+        if (!liveAiActive) {
+          startLiveAiScan();
+        }
+        showToast('🧪 Live defect radar simulation active (feeding test hazard frames)');
+      } else {
+        if (simBtn) {
+          simBtn.classList.remove('active');
+          simBtn.innerText = '🧪 Live Sim: OFF';
+          simBtn.style.background = '';
+          simBtn.style.color = '#7c3aed';
+          simBtn.style.borderColor = '#8b5cf6';
+        }
+        showToast('Live defect simulation stopped');
+      }
+    }
 
     async function runLiveAiFrame() {
       if (!liveAiActive || liveAiBusy) return;
       const video = document.getElementById('camera-video');
-      if (!video || video.readyState < 2 || video.paused || video.ended || !video.videoWidth) return;
+      const hasVideo = video && video.readyState >= 2 && !video.paused && !video.ended && video.videoWidth > 0 && video.videoHeight > 0;
+
+      if (!hasVideo && !simulateLiveDefectActive) return;
 
       liveAiBusy = true;
       const frameStart = performance.now();
       try {
         const offCanvas = document.createElement('canvas');
-        offCanvas.width = 256;
-        offCanvas.height = 256;
+        offCanvas.width = 384;
+        offCanvas.height = 384;
         const ctx = offCanvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, 256, 256);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
-        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.55));
+        if (simulateLiveDefectActive && simDefectImg && simDefectImg.complete && simDefectImg.naturalWidth > 0) {
+          // Live simulation mode: feeds sample road defect into radar loop
+          ctx.drawImage(simDefectImg, 0, 0, 384, 384);
+        } else if (hasVideo) {
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+          const rect = video.getBoundingClientRect();
+          const cw = rect.width || 360;
+          const ch = rect.height || 360;
+
+          // Accurate object-fit: cover visible viewport crop extraction
+          const scale = Math.max(cw / vw, ch / vh);
+          const visibleW = Math.min(vw, cw / scale);
+          const visibleH = Math.min(vh, ch / scale);
+          const cropX = Math.max(0, (vw - visibleW) / 2);
+          const cropY = Math.max(0, (vh - visibleH) / 2);
+
+          ctx.drawImage(video, cropX, cropY, visibleW, visibleH, 0, 0, 384, 384);
+        } else {
+          liveAiBusy = false;
+          return;
+        }
+
+        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.82));
         if (!blob || !liveAiActive) {
           liveAiBusy = false;
           return;
@@ -2507,14 +2579,23 @@
         const data = await res.json();
 
         if (data && data.success && liveAiActive) {
-          activeLiveDetections = data.detections || [];
-          drawLiveHudOverlay(activeLiveDetections);
+          const freshDetections = data.detections || [];
+          const now = performance.now();
+
+          // Temporal persistence smoothing: keeps bounding boxes stable without flickering
+          if (freshDetections.length > 0) {
+            persistentDetections = freshDetections;
+            persistExpiryTime = now + 750; // Hold defect box for 750ms
+          } else if (now > persistExpiryTime) {
+            persistentDetections = [];
+          }
+
+          drawLiveHudOverlay(persistentDetections);
 
           // Live performance telemetry computation
-          const now = performance.now();
           const frameMs = Math.round(now - frameStart);
           liveFrameCount++;
-          if (now - liveLastFpsTime >= 900) {
+          if (now - liveLastFpsTime >= 850) {
             liveFpsCurrent = Math.max(1, Math.round((liveFrameCount * 1000) / (now - liveLastFpsTime)));
             liveFrameCount = 0;
             liveLastFpsTime = now;
@@ -2525,9 +2606,9 @@
           }
 
           const statusLabel = document.getElementById('live-ai-status-label');
-          if (activeLiveDetections.length > 0) {
+          if (persistentDetections.length > 0) {
             triggerHaptic();
-            const top = activeLiveDetections[0];
+            const top = persistentDetections[0];
             if (statusLabel) {
               statusLabel.innerText = `⚠️ ${top.class.toUpperCase()} (${Math.round(top.confidence * 100)}%)`;
               statusLabel.style.color = '#ef4444';
@@ -2554,12 +2635,15 @@
     function drawLiveHudOverlay(detections) {
       const canvas = document.getElementById('live-hud-canvas');
       const video = document.getElementById('camera-video');
-      if (!canvas || !video) return;
+      if (!canvas) return;
 
-      const rect = video.getBoundingClientRect();
-      if (canvas.width !== rect.width || canvas.height !== rect.height) {
-        canvas.width = rect.width;
-        canvas.height = rect.height;
+      const vBox = document.getElementById('viewfinder-box');
+      const rect = vBox ? vBox.getBoundingClientRect() : (video ? video.getBoundingClientRect() : { width: 360, height: 360 });
+      if (rect.width > 0 && rect.height > 0) {
+        if (canvas.width !== rect.width || canvas.height !== rect.height) {
+          canvas.width = rect.width;
+          canvas.height = rect.height;
+        }
       }
 
       const ctx = canvas.getContext('2d');
@@ -2579,13 +2663,13 @@
         const cLow = (d.raw_cls || '').toLowerCase();
 
         if (cLow.includes('pothole') || cLow.includes('hole')) {
-          strokeColor = '#ef4444'; // Red
+          strokeColor = '#ef4444'; // Red: Pothole
           fillColor = 'rgba(239, 68, 68, 0.22)';
         } else if (cLow.includes('alligator')) {
-          strokeColor = '#f97316'; // Orange
+          strokeColor = '#f97316'; // Orange: Alligator structural fatigue
           fillColor = 'rgba(249, 115, 22, 0.22)';
         } else if (cLow.includes('transverse') || cLow.includes('longitudinal') || cLow.includes('crack')) {
-          strokeColor = '#eab308'; // Amber
+          strokeColor = '#eab308'; // Amber: Linear cracks
           fillColor = 'rgba(234, 179, 8, 0.22)';
         }
 
@@ -2602,11 +2686,12 @@
         ctx.beginPath(); ctx.moveTo(x1, y1 + h - blen); ctx.lineTo(x1, y1 + h); ctx.lineTo(x1 + blen, y1 + h); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1 + h); ctx.lineTo(x1 + w, y1 + h); ctx.lineTo(x1 + w, y1 + h - blen); ctx.stroke();
 
+        // Smart Tag Position: if box is near top of screen (y1 < 28px), position inside box so it is never clipped
         const tagText = `${d.class} ${Math.round(d.confidence * 100)}%`;
         ctx.font = 'bold 11px sans-serif';
         const tWidth = ctx.measureText(tagText).width;
         const tagH = 18;
-        const tagY = Math.max(0, y1 - tagH - 4);
+        const tagY = (y1 > 28) ? (y1 - tagH - 4) : (y1 + 4);
 
         ctx.fillStyle = strokeColor;
         ctx.beginPath();
@@ -2616,6 +2701,28 @@
         ctx.fillStyle = '#ffffff';
         ctx.fillText(tagText, x1 + 6, tagY + 13);
       });
+    }
+
+    async function testSampleDefectInspection(defectType) {
+      triggerHaptic();
+      const isPothole = defectType === 'pothole';
+      const sampleUrl = isPothole ? '/uploads/pothole_demo.jpg' : '/uploads/demo.jpg';
+      const sampleName = isPothole ? 'test_pothole_sample.jpg' : 'test_crack_sample.jpg';
+      
+      showToast(`🧪 Loading ${isPothole ? 'Pothole' : 'Crack'} test frame...`);
+      try {
+        const res = await fetch(sampleUrl);
+        const blob = await res.blob();
+        selectedFile = new File([blob], sampleName, { type: 'image/jpeg' });
+        const previewUrl = URL.createObjectURL(selectedFile);
+        document.getElementById('preview-img').src = previewUrl;
+        document.getElementById('preview-card').style.display = 'block';
+        document.getElementById('result-sheet').style.display = 'none';
+        document.getElementById('preview-card').scrollIntoView({ behavior: 'smooth' });
+        uploadAndRunInference();
+      } catch (err) {
+        showToast('⚠️ Could not load test sample');
+      }
     }
 
     // Window Resize / Orientation Change Handler
