@@ -3,28 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>RoadGuard — Mobile AI Road Inspector</title>
+  <title>RoadGuard — Mobile AI Road & Pothole Inspector</title>
+  
+  <!-- Modern Professional Typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+
   <style>
     :root {
-      --bg: #030712;
-      --surface: #0b1120;
-      --surface-elevated: #111b2e;
-      --surface-border: #1e293b;
-      --primary: #3b82f6;
-      --primary-glow: rgba(59, 130, 246, 0.35);
-      --accent: #06b6d4;
-      --critical: #ef4444;
-      --high: #f97316;
-      --medium: #eab308;
-      --low: #22c55e;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
+      /* Clean Professional White Enterprise System */
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-elevated: #ffffff;
+      --surface-border: #e2e8f0;
+      --surface-border-subtle: #f1f5f9;
+      
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --primary-border: #bfdbfe;
+      --primary-glow: rgba(37, 99, 235, 0.18);
+      
+      --accent: #0284c7;
+      --critical: #dc2626;
+      --critical-light: #fef2f2;
+      --critical-border: #fecaca;
+      
+      --high: #ea580c;
+      --high-light: #fff7ed;
+      --high-border: #fed7aa;
+      
+      --medium: #d97706;
+      --medium-light: #fffbeb;
+      --medium-border: #fde68a;
+      
+      --low: #16a34a;
+      --low-light: #f0fdf4;
+      --low-border: #bbf7d0;
+
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
+      --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+
+      --native-ratio: 9 / 16;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
 
     body {
       background: var(--bg);
@@ -33,7 +70,8 @@
       display: flex;
       flex-direction: column;
       overflow-x: hidden;
-      padding-bottom: calc(65px + env(safe-area-inset-bottom, 10px));
+      padding-bottom: calc(72px + env(safe-area-inset-bottom, 12px));
+      -webkit-font-smoothing: antialiased;
     }
 
     /* === Top Glass Header === */
@@ -41,67 +79,72 @@
       position: sticky;
       top: 0;
       z-index: 1000;
-      background: rgba(11, 17, 32, 0.85);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
       border-bottom: 1px solid var(--surface-border);
-      padding: 10px 16px;
+      padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
     }
 
     .brand-wrap {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
 
     .brand-logo-icon {
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, #2563eb, #06b6d4);
-      border-radius: 9px;
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #2563eb, #0284c7);
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
-      box-shadow: 0 0 15px var(--primary-glow);
+      font-size: 18px;
+      color: white;
+      box-shadow: 0 4px 10px var(--primary-glow);
     }
 
     .brand-text h1 {
-      font-size: 15px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 16px;
       font-weight: 800;
       letter-spacing: -0.3px;
-      background: linear-gradient(135deg, #ffffff, #93c5fd);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      color: #0f172a;
+      line-height: 1.15;
     }
 
     .brand-text p {
-      font-size: 10px;
+      font-size: 10.5px;
       color: var(--text-muted);
-      font-weight: 500;
-      letter-spacing: 0.2px;
+      font-weight: 600;
+      letter-spacing: 0.1px;
     }
 
     .header-status-pill {
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 10px;
+      padding: 5px 11px;
       border-radius: 20px;
-      background: rgba(34, 197, 94, 0.12);
-      border: 1px solid rgba(34, 197, 94, 0.3);
-      color: #4ade80;
+      background: var(--low-light);
+      border: 1px solid var(--low-border);
+      color: var(--low);
       font-size: 11px;
       font-weight: 700;
       font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      transition: all 0.2s ease;
     }
+    .header-status-pill:active { transform: scale(0.95); }
     .header-status-pill.searching {
-      background: rgba(234, 179, 8, 0.12);
-      border-color: rgba(234, 179, 8, 0.3);
-      color: #facc15;
+      background: var(--medium-light);
+      border-color: var(--medium-border);
+      color: var(--medium);
     }
 
     .pulse-dot {
@@ -110,50 +153,56 @@
       border-radius: 50%;
       background: currentColor;
       box-shadow: 0 0 8px currentColor;
-      animation: radarPulse 1.5s infinite;
+      animation: radarPulse 1.6s infinite;
     }
-    @keyframes radarPulse { 0%{opacity:1; transform:scale(1)} 50%{opacity:0.4; transform:scale(1.2)} 100%{opacity:1; transform:scale(1)} }
+    @keyframes radarPulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(1.3); }
+      100% { opacity: 1; transform: scale(1); }
+    }
 
-    /* === Telemetry HUD Bar === */
+    /* === Live Telemetry Strip === */
     .telemetry-strip {
-      background: #070c18;
+      background: #ffffff;
       border-bottom: 1px solid var(--surface-border);
-      padding: 8px 16px;
+      padding: 9px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 11px;
-      color: var(--text-muted);
+      font-size: 11.5px;
+      cursor: pointer;
+      transition: background 0.15s;
     }
+    .telemetry-strip:active { background: #f1f5f9; }
 
     .geo-coord {
       font-family: 'JetBrains Mono', monospace;
-      color: #38bdf8;
-      font-weight: 600;
+      color: var(--primary);
+      font-weight: 700;
       display: flex;
       align-items: center;
       gap: 5px;
     }
 
     .geo-road-name {
-      font-size: 11px;
-      color: #e2e8f0;
+      font-size: 11.5px;
+      color: #334155;
       font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 50%;
+      max-width: 52%;
     }
 
-    /* === View Navigation Tabs (Bottom Navigation Bar) === */
+    /* === Bottom Navigation Bar === */
     .bottom-nav {
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
-      height: calc(60px + env(safe-area-inset-bottom, 10px));
-      padding-bottom: env(safe-area-inset-bottom, 10px);
-      background: rgba(11, 17, 32, 0.94);
+      height: calc(62px + env(safe-area-inset-bottom, 12px));
+      padding-bottom: env(safe-area-inset-bottom, 12px);
+      background: rgba(255, 255, 255, 0.96);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border-top: 1px solid var(--surface-border);
@@ -161,6 +210,7 @@
       justify-content: space-around;
       align-items: center;
       z-index: 1100;
+      box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.03);
     }
 
     .nav-tab {
@@ -179,37 +229,142 @@
     }
     .nav-tab:active { transform: scale(0.92); }
     .nav-tab.active {
-      color: #38bdf8;
-      background: rgba(56, 189, 248, 0.08);
+      color: var(--primary);
+      background: var(--primary-light);
     }
-    .nav-tab-icon { font-size: 18px; }
+    .nav-tab-icon { font-size: 19px; line-height: 1; }
 
     /* === Tab Views Container === */
     .tab-content { display: none; flex: 1; flex-direction: column; }
     .tab-content.active { display: flex; animation: viewFade 0.25s ease-out; }
-    @keyframes viewFade { from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)} }
+    @keyframes viewFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
     /* =======================================================
-       TAB 1: CAMERA SCANNER VIEW
+       TAB 1: CAMERA & DETECTOR SCANNER VIEW
        ======================================================= */
-    .viewfinder-wrapper {
-      position: relative;
-      background: #000;
+    .scanner-main-wrap {
+      display: flex;
+      flex-direction: column;
+      padding: 12px 14px 18px 14px;
+      gap: 12px;
+      max-width: 580px;
+      margin: 0 auto;
       width: 100%;
-      height: 48vh;
-      min-height: 280px;
-      max-height: 440px;
-      overflow: hidden;
+    }
+
+    /* Aspect Ratio & Lens Control Deck */
+    .aspect-deck {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 14px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .aspect-deck-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .aspect-pills-row {
+      display: flex;
+      gap: 4px;
+      flex: 1;
+      justify-content: space-between;
+    }
+
+    .aspect-pill {
+      background: #f1f5f9;
+      border: 1px solid var(--surface-border);
+      color: #475569;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 7px;
+      border-radius: 8px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+      flex: 1;
+      text-align: center;
+    }
+    .aspect-pill:active { transform: scale(0.94); }
+    .aspect-pill.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 2px 6px var(--primary-glow);
+    }
+
+    .btn-lens-flip {
+      background: #f8fafc;
+      border: 1px solid var(--surface-border);
+      color: #334155;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 14px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .btn-lens-flip:active { transform: rotate(180deg) scale(0.9); }
+
+    /* Live Camera Viewfinder Housing */
+    .viewfinder-outer-shell {
+      position: relative;
+      background: #000000;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 2px solid #cbd5e1;
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Dynamic Aspect Ratio Modes */
+    .ratio-auto {
+      aspect-ratio: var(--native-ratio);
+      width: 100%;
+      max-height: 60vh;
+    }
+    .ratio-9-16 {
+      aspect-ratio: 9 / 16;
+      width: 100%;
+      max-height: 64vh;
+    }
+    .ratio-4-3 {
+      aspect-ratio: 3 / 4;
+      width: 100%;
+      max-height: 54vh;
+    }
+    .ratio-1-1 {
+      aspect-ratio: 1 / 1;
+      width: 100%;
+      max-height: 48vh;
     }
 
     #camera-video {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: none;
+      background: #000;
     }
 
     #live-hud-canvas {
@@ -230,27 +385,40 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 16px;
+      padding: 12px;
+      z-index: 6;
     }
 
     .hud-top-meta {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      color: rgba(255, 255, 255, 0.7);
-      background: rgba(0, 0, 0, 0.4);
-      padding: 4px 8px;
-      border-radius: 6px;
-      backdrop-filter: blur(4px);
+      font-size: 10.5px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.9);
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 6px 10px;
+      border-radius: 8px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+
+    .hud-telemetry-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: #38bdf8;
+      font-weight: 700;
     }
 
     .hud-target-box {
       align-self: center;
       width: 72%;
-      max-width: 300px;
-      height: 55%;
-      border: 1px dashed rgba(56, 189, 248, 0.4);
+      max-width: 290px;
+      height: 52%;
+      border: 1px dashed rgba(56, 189, 248, 0.45);
       border-radius: 14px;
       position: relative;
       display: flex;
@@ -258,7 +426,7 @@
       justify-content: center;
     }
 
-    /* Brackets */
+    /* Reticle Brackets */
     .corner-bracket {
       position: absolute;
       width: 16px;
@@ -284,7 +452,22 @@
     .crosshair-center::before { width: 100%; height: 2px; top: 5px; left: 0; }
     .crosshair-center::after { width: 2px; height: 100%; top: 0; left: 5px; }
 
-    /* Laser Scanning Animation */
+    .hud-bottom-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.85);
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 5px 10px;
+      border-radius: 8px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+
+    /* Laser Scanning Line Animation */
     .scanline {
       display: none;
       position: absolute;
@@ -295,6 +478,7 @@
       background: linear-gradient(90deg, transparent, #38bdf8, transparent);
       box-shadow: 0 0 12px #38bdf8;
       animation: scanning 1.8s infinite ease-in-out;
+      z-index: 7;
     }
     @keyframes scanning {
       0% { top: 0%; opacity: 0; }
@@ -303,31 +487,38 @@
       100% { top: 100%; opacity: 0; }
     }
 
-    /* Fallback Splash in Viewfinder */
+    /* Viewfinder Splash Cover */
     .viewfinder-splash {
+      position: absolute;
+      inset: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       gap: 12px;
       text-align: center;
       padding: 24px;
       cursor: pointer;
+      background: radial-gradient(circle at center, #111827 0%, #030712 100%);
+      z-index: 8;
     }
     .splash-icon {
-      font-size: 52px;
-      filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.4));
+      font-size: 48px;
+      filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.5));
       animation: floatIcon 3s ease-in-out infinite;
     }
     @keyframes floatIcon { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
 
-    /* Scanner Controls Deck */
+    /* Shutter & Scanner Controls Deck */
     .scanner-controls {
-      padding: 16px;
       background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 18px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      border-top: 1px solid var(--surface-border);
+      gap: 14px;
+      box-shadow: var(--shadow-sm);
     }
 
     .shutter-row {
@@ -336,57 +527,61 @@
       align-items: center;
     }
 
-    .btn-shutter {
-      flex: 1;
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
-      color: white;
-      border: none;
-      border-radius: 14px;
-      padding: 14px 18px;
-      font-size: 15px;
-      font-weight: 800;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      cursor: pointer;
-      box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
-      transition: all 0.15s;
-    }
-    .btn-shutter:active { transform: scale(0.97); }
-
     .btn-gallery-pick {
-      width: 48px;
-      height: 48px;
-      border-radius: 14px;
-      background: var(--surface-elevated);
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: #f1f5f9;
       border: 1px solid var(--surface-border);
-      color: #94a3b8;
+      color: #334155;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 20px;
       cursor: pointer;
       transition: all 0.15s;
+      flex-shrink: 0;
     }
-    .btn-gallery-pick:active { transform: scale(0.94); background: #1e293b; color: #fff; }
+    .btn-gallery-pick:active { transform: scale(0.92); background: #e2e8f0; }
 
-    /* Quick GPS Chip Row */
+    .btn-shutter {
+      flex: 1;
+      height: 52px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      border: none;
+      border-radius: 16px;
+      padding: 0 20px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+      transition: all 0.15s;
+    }
+    .btn-shutter:active { transform: scale(0.97); }
+
+    /* Quick Action Chips */
     .quick-chips-row {
       display: flex;
       gap: 8px;
       overflow-x: auto;
       padding-bottom: 2px;
+      scrollbar-width: none;
     }
     .quick-chips-row::-webkit-scrollbar { display: none; }
 
     .chip-btn {
-      background: var(--surface-elevated);
+      background: #f8fafc;
       border: 1px solid var(--surface-border);
-      color: #94a3b8;
-      padding: 6px 12px;
+      color: #475569;
+      padding: 7px 13px;
       border-radius: 20px;
-      font-size: 11px;
+      font-size: 11.5px;
       font-weight: 600;
       white-space: nowrap;
       cursor: pointer;
@@ -395,63 +590,67 @@
       gap: 5px;
       transition: all 0.15s;
     }
-    .chip-btn.active, .chip-btn:active {
-      background: rgba(59, 130, 246, 0.15);
-      border-color: #3b82f6;
-      color: #93c5fd;
+    .chip-btn:active { transform: scale(0.95); }
+    .chip-btn.active {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: var(--primary);
+      font-weight: 700;
     }
 
-    /* Image Preview & Upload Drawer */
+    /* Preview Card (Before Final Inference) */
     .preview-card {
       display: none;
-      background: var(--surface-elevated);
+      background: var(--surface);
       border: 1px solid var(--surface-border);
-      border-radius: 14px;
-      padding: 12px;
-      margin: 12px 16px;
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: var(--shadow-md);
       animation: slideUp 0.3s ease;
     }
     .preview-img-box {
       position: relative;
-      border-radius: 10px;
+      border-radius: 12px;
       overflow: hidden;
-      max-height: 240px;
+      max-height: 280px;
       border: 1px solid var(--surface-border);
+      background: #000;
     }
     .preview-img-box img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       display: block;
     }
 
     .preview-actions {
       display: flex;
       gap: 10px;
-      margin-top: 10px;
+      margin-top: 12px;
     }
     .btn-analyze {
       flex: 2;
-      background: linear-gradient(135deg, #059669, #10b981);
+      background: linear-gradient(135deg, #16a34a, #15803d);
       color: white;
       border: none;
-      border-radius: 10px;
+      border-radius: 12px;
       padding: 12px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
       font-weight: 700;
-      font-size: 13px;
+      font-size: 13.5px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+      gap: 7px;
+      box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
     }
     .btn-retake {
       flex: 1;
-      background: var(--surface);
-      color: #f87171;
-      border: 1px solid var(--surface-border);
-      border-radius: 10px;
+      background: #f8fafc;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+      border-radius: 12px;
       padding: 12px;
       font-weight: 700;
       font-size: 13px;
@@ -461,15 +660,14 @@
     /* Result Card Modal / Drawer */
     .result-sheet {
       display: none;
-      background: var(--surface-elevated);
+      background: var(--surface);
       border: 1px solid var(--surface-border);
-      border-radius: 16px;
+      border-radius: 18px;
       padding: 16px;
-      margin: 12px 16px 20px 16px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      box-shadow: var(--shadow-lg);
       animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    @keyframes slideUp { from{transform:translateY(25px); opacity:0} to{transform:translateY(0); opacity:1} }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
     .result-sheet-header {
       display: flex;
@@ -479,28 +677,28 @@
     }
 
     .damage-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
       font-size: 18px;
       font-weight: 800;
-      color: #f8fafc;
+      color: #0f172a;
       letter-spacing: -0.3px;
     }
 
     .priority-badge-lg {
       font-size: 11px;
       font-weight: 800;
-      padding: 4px 10px;
+      padding: 5px 11px;
       border-radius: 8px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    .p-critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
-    .p-high { background: rgba(249, 115, 22, 0.2); color: #f97316; border: 1px solid #f97316; }
-    .p-medium { background: rgba(234, 179, 8, 0.2); color: #eab308; border: 1px solid #eab308; }
-    .p-low { background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid #22c55e; }
+    .p-critical { background: var(--critical-light); color: var(--critical); border: 1px solid var(--critical-border); }
+    .p-high { background: var(--high-light); color: var(--high); border: 1px solid var(--high-border); }
+    .p-medium { background: var(--medium-light); color: var(--medium); border: 1px solid var(--medium-border); }
+    .p-low { background: var(--low-light); color: var(--low); border: 1px solid var(--low-border); }
 
-    /* Severity Bar */
     .severity-meter-box {
-      background: var(--surface);
+      background: #f8fafc;
       border: 1px solid var(--surface-border);
       border-radius: 10px;
       padding: 10px 14px;
@@ -518,11 +716,12 @@
       font-size: 16px;
       font-weight: 800;
       font-family: 'JetBrains Mono', monospace;
+      color: #0f172a;
     }
     .severity-bar-bg {
       flex: 1;
-      height: 6px;
-      background: #1e293b;
+      height: 7px;
+      background: #e2e8f0;
       border-radius: 4px;
       margin: 0 12px;
       overflow: hidden;
@@ -536,21 +735,23 @@
 
     .annotated-result-img {
       width: 100%;
-      border-radius: 10px;
+      border-radius: 12px;
       border: 1px solid var(--surface-border);
       margin-bottom: 12px;
+      background: #000;
     }
 
     .geo-meta-card {
-      background: var(--surface);
-      border-radius: 10px;
-      padding: 10px 12px;
+      background: #f8fafc;
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      padding: 12px 14px;
       font-size: 12px;
       line-height: 1.6;
-      color: #94a3b8;
+      color: #475569;
       margin-bottom: 12px;
     }
-    .geo-meta-card strong { color: #f1f5f9; }
+    .geo-meta-card strong { color: #0f172a; }
 
     .result-sheet-actions {
       display: flex;
@@ -558,8 +759,8 @@
     }
     .btn-sheet-action {
       flex: 1;
-      padding: 10px;
-      border-radius: 10px;
+      padding: 11px;
+      border-radius: 12px;
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
@@ -568,9 +769,11 @@
       justify-content: center;
       gap: 5px;
       border: 1px solid var(--surface-border);
-      background: var(--surface);
-      color: #e2e8f0;
+      background: #ffffff;
+      color: #334155;
+      transition: all 0.15s;
     }
+    .btn-sheet-action:active { transform: scale(0.96); background: #f1f5f9; }
     .btn-sheet-action.primary {
       background: var(--primary);
       border-color: var(--primary);
@@ -590,10 +793,66 @@
     #gis-fullmap {
       width: 100%;
       height: 100%;
-      background: #090f20;
+      background: #e2e8f0;
     }
 
-    /* Map Floating Controls */
+    .map-search-bar {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 68px;
+      z-index: 800;
+    }
+    .map-search-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      color: #0f172a;
+      font-size: 13px;
+      padding: 10px 14px;
+      outline: none;
+      box-shadow: var(--shadow-md);
+      transition: border-color 0.2s;
+    }
+    .map-search-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--primary-light);
+    }
+    .map-search-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+      box-shadow: var(--shadow-lg);
+      z-index: 850;
+    }
+    .map-search-item {
+      padding: 10px 14px;
+      font-size: 12px;
+      border-bottom: 1px solid #f1f5f9;
+      cursor: pointer;
+      color: #334155;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .map-search-item:last-child { border-bottom: none; }
+    .map-search-item:hover, .map-search-item:active {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
     .map-fab-stack {
       position: absolute;
       top: 14px;
@@ -608,35 +867,35 @@
       width: 42px;
       height: 42px;
       border-radius: 12px;
-      background: rgba(15, 23, 42, 0.9);
+      background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(8px);
       border: 1px solid var(--surface-border);
-      color: #38bdf8;
+      color: #0f172a;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 18px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      box-shadow: var(--shadow-md);
       cursor: pointer;
       transition: all 0.15s;
     }
-    .map-fab:active { transform: scale(0.92); background: #1e293b; }
+    .map-fab:active { transform: scale(0.92); background: #f1f5f9; }
 
     .map-bottom-drawer {
       position: absolute;
-      bottom: 12px;
-      left: 12px;
-      right: 12px;
+      bottom: 14px;
+      left: 14px;
+      right: 14px;
       z-index: 800;
-      background: rgba(11, 17, 32, 0.92);
-      backdrop-filter: blur(14px);
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(16px);
       border: 1px solid var(--surface-border);
-      border-radius: 14px;
+      border-radius: 16px;
       padding: 12px 14px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: var(--shadow-lg);
     }
 
     /* =======================================================
@@ -645,6 +904,9 @@
     .feed-tab-container {
       padding: 14px 16px;
       flex: 1;
+      max-width: 600px;
+      margin: 0 auto;
+      width: 100%;
     }
 
     .feed-header-bar {
@@ -653,7 +915,12 @@
       align-items: center;
       margin-bottom: 12px;
     }
-    .feed-title { font-size: 16px; font-weight: 800; }
+    .feed-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 17px;
+      font-weight: 800;
+      color: #0f172a;
+    }
 
     .feed-list {
       display: flex;
@@ -664,23 +931,25 @@
     .incident-item {
       background: var(--surface);
       border: 1px solid var(--surface-border);
-      border-radius: 12px;
+      border-radius: 14px;
       padding: 12px;
       display: flex;
       gap: 12px;
       align-items: center;
       cursor: pointer;
+      box-shadow: var(--shadow-sm);
       transition: all 0.15s;
     }
-    .incident-item:active { transform: scale(0.98); background: #131d33; }
+    .incident-item:active { transform: scale(0.98); background: #f8fafc; }
 
     .incident-thumb {
-      width: 60px;
-      height: 60px;
-      border-radius: 8px;
+      width: 64px;
+      height: 64px;
+      border-radius: 10px;
       object-fit: cover;
-      background: #1e293b;
+      background: #f1f5f9;
       border: 1px solid var(--surface-border);
+      flex-shrink: 0;
     }
 
     .incident-details {
@@ -696,116 +965,59 @@
     .incident-name {
       font-size: 14px;
       font-weight: 700;
+      color: #0f172a;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .incident-road {
-      font-size: 11px;
+      font-size: 11.5px;
       color: var(--text-muted);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
     .incident-sub {
-      font-size: 10px;
-      color: #64748b;
+      font-size: 10.5px;
+      color: #94a3b8;
       font-family: 'JetBrains Mono', monospace;
     }
 
     /* === Toast Notification Component === */
     .toast-box {
       position: fixed;
-      top: 65px;
+      top: 68px;
       left: 50%;
       transform: translateX(-50%) translateY(-20px);
-      background: rgba(15, 23, 42, 0.95);
-      border: 1px solid #38bdf8;
-      color: #f8fafc;
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 12px;
+      background: #ffffff;
+      border: 1px solid var(--primary-border);
+      color: #0f172a;
+      padding: 9px 18px;
+      border-radius: 30px;
+      font-size: 12.5px;
       font-weight: 600;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: var(--shadow-lg);
       opacity: 0;
       pointer-events: none;
       transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
       z-index: 2000;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 7px;
     }
     .toast-box.show {
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
 
-    /* Map Search Bar & Autocomplete */
-    .map-search-bar {
-      position: absolute;
-      top: 14px;
-      left: 14px;
-      right: 68px;
-      z-index: 800;
-    }
-    .map-search-input {
-      width: 100%;
-      background: rgba(15, 23, 42, 0.92);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid var(--surface-border);
-      border-radius: 12px;
-      color: #f8fafc;
-      font-size: 13px;
-      padding: 10px 14px;
-      outline: none;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-      transition: border-color 0.2s;
-    }
-    .map-search-input:focus {
-      border-color: #38bdf8;
-      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
-    }
-    .map-search-dropdown {
-      position: absolute;
-      top: calc(100% + 6px);
-      left: 0;
-      right: 0;
-      background: rgba(15, 23, 42, 0.98);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid var(--surface-border);
-      border-radius: 12px;
-      max-height: 220px;
-      overflow-y: auto;
-      display: none;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
-      z-index: 850;
-    }
-    .map-search-item {
-      padding: 10px 14px;
-      font-size: 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      cursor: pointer;
-      color: #e2e8f0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .map-search-item:last-child { border-bottom: none; }
-    .map-search-item:hover, .map-search-item:active {
-      background: rgba(56, 189, 248, 0.15);
-      color: #38bdf8;
-    }
-
     /* Geo Modals */
     .geo-modal-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.75);
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       z-index: 3000;
       display: flex;
       align-items: center;
@@ -816,42 +1028,57 @@
     .geo-modal-box {
       background: var(--surface);
       border: 1px solid var(--surface-border);
-      border-radius: 18px;
+      border-radius: 20px;
       max-width: 420px;
       width: 100%;
-      padding: 20px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      padding: 22px;
+      box-shadow: var(--shadow-xl);
     }
     .geo-modal-title {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      font-family: 'Plus Jakarta Sans', sans-serif;
       font-weight: 800;
       font-size: 16px;
       margin-bottom: 12px;
-      color: #f8fafc;
+      color: #0f172a;
     }
     .geo-modal-close {
       background: none;
       border: none;
       color: #94a3b8;
-      font-size: 18px;
+      font-size: 20px;
       cursor: pointer;
       padding: 4px;
     }
     .geo-modal-input {
       width: 100%;
-      background: var(--bg);
+      background: #f8fafc;
       border: 1px solid var(--surface-border);
       border-radius: 10px;
       padding: 10px 12px;
-      color: #f8fafc;
+      color: #0f172a;
       font-family: 'JetBrains Mono', monospace;
       font-size: 13px;
       outline: none;
       margin-top: 4px;
     }
-    .geo-modal-input:focus { border-color: #38bdf8; }
+    .geo-modal-input:focus {
+      border-color: var(--primary);
+      background: #ffffff;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -862,17 +1089,17 @@
       <div class="brand-logo-icon">🛡️</div>
       <div class="brand-text">
         <h1>RoadGuard</h1>
-        <p>AI Road & Pothole Inspector</p>
+        <p>Mobile AI Road Inspector</p>
       </div>
     </div>
-    <div class="header-status-pill searching" id="header-gps-pill" onclick="openGpsInfoModal()" style="cursor:pointer;" title="Tap for GPS Diagnostics">
+    <div class="header-status-pill searching" id="header-gps-pill" onclick="openGpsInfoModal()" title="Tap for GPS Diagnostics">
       <span class="pulse-dot"></span>
       <span id="gps-pill-text">ACQUIRING GPS...</span>
     </div>
   </header>
 
   <!-- Live Telemetry Strip -->
-  <section class="telemetry-strip" onclick="switchTab('map')" style="cursor:pointer;" title="Tap to view on GIS map">
+  <section class="telemetry-strip" onclick="switchTab('map')" title="Tap to view on GIS map">
     <div class="geo-coord">
       <span>📍</span>
       <span id="live-coords">12.97160° N, 77.59460° E</span>
@@ -888,146 +1115,165 @@
     <span id="toast-msg">Ready</span>
   </div>
 
-  <!-- Hidden native camera input (instant backend capture) -->
+  <!-- Hidden native camera input (fallback photo capture) -->
   <input type="file" id="file-capture" accept="image/*" capture="environment" onchange="onFilePicked(event)" style="display:none;">
 
   <!-- ==========================================
        TAB 1: CAMERA & DETECTOR SCANNER VIEW
        ========================================== -->
   <div class="tab-content active" id="tab-scanner">
-    
-    <!-- Viewfinder Area -->
-    <div class="viewfinder-wrapper">
-      <video id="camera-video" autoplay playsinline muted></video>
-      <canvas id="live-hud-canvas"></canvas>
-      <canvas id="camera-canvas" style="display:none;"></canvas>
-
-      <!-- Laser Scanner Animation Overlay -->
-      <div class="scanline" id="scanline"></div>
-
-      <!-- High-Tech HUD Viewfinder Graphic -->
-      <div class="hud-overlay">
-        <div class="hud-top-meta">
-          <span id="live-ai-status-label">YOLOv8 DUAL ENSEMBLE AI</span>
-          <span id="hud-accuracy-disp">ACC: LOCATING</span>
-        </div>
-
-        <div class="hud-target-box">
-          <div class="corner-bracket bracket-tl"></div>
-          <div class="corner-bracket bracket-tr"></div>
-          <div class="corner-bracket bracket-bl"></div>
-          <div class="corner-bracket bracket-br"></div>
-          <div class="crosshair-center"></div>
-        </div>
-
-        <div class="hud-top-meta" style="justify-content:center; gap: 12px;">
-          <span>TARGET: POTHOLE / SEWER / CRACK</span>
-        </div>
-      </div>
-
-      <!-- Live Camera Stream Activation Splash -->
-      <div class="viewfinder-splash" id="viewfinder-splash" onclick="startLiveCameraScanner()">
-        <span class="splash-icon">📹</span>
-        <p style="font-weight: 800; font-size: 16px; color: #f8fafc;">Start Live Camera Radar</p>
-        <p style="font-size: 12px; color: #94a3b8; max-width: 270px; margin-bottom: 12px;">
-          Tap to start live camera video with real-time AI bounding boxes tracking potholes and cracks.
-        </p>
-        <button class="btn-sheet-action primary" style="max-width: 200px; font-size: 13px; padding: 10px 16px;" onclick="event.stopPropagation(); startLiveCameraScanner();">
-          ▶ Start Live Camera
-        </button>
-      </div>
-    </div>
-
-    <!-- Scanner Bottom Controls -->
-    <div class="scanner-controls">
+    <div class="scanner-main-wrap">
       
-      <!-- Primary Shutter Button -->
-      <div class="shutter-row">
-        <button class="btn-gallery-pick" onclick="triggerCameraCapture()" title="Open Gallery / Photos">
-          📁
-        </button>
-        <button class="btn-shutter" onclick="handleShutterPress()">
-          📸 Snap Road Damage
-        </button>
-      </div>
-
-      <!-- Quick Location & Live AI Controls -->
-      <div class="quick-chips-row">
-        <button class="chip-btn" id="chip-live-ai-btn" onclick="toggleLiveAiScan()" style="border-color: #34d399; color: #34d399; font-weight: 700;">
-          ⚡ Live AI Scan: OFF
-        </button>
-        <button class="chip-btn active" id="chip-gps-btn" onclick="acquireLocation(true)">
-          🛰️ My Live GPS
-        </button>
-        <button class="chip-btn" id="chip-watch-btn" onclick="toggleLiveTracking()">
-          📍 Auto Track: OFF
-        </button>
-        <button class="chip-btn" onclick="openManualCoordModal()">✏️ Lat/Lon</button>
-        <button class="chip-btn" onclick="jumpLocation('BANGALORE')">Bangalore</button>
-        <button class="chip-btn" onclick="jumpLocation('DELHI')">Delhi</button>
-        <button class="chip-btn" onclick="jumpLocation('MUMBAI')">Mumbai</button>
-        <button class="chip-btn" onclick="jumpLocation('HYDERABAD')">Hyderabad</button>
-        <button class="chip-btn" onclick="jumpLocation('CHENNAI')">Chennai</button>
-        <button class="chip-btn" onclick="jumpLocation('PUNE')">Pune</button>
-      </div>
-    </div>
-
-    <!-- Photo Preview Drawer (Before Detection) -->
-    <div class="preview-card" id="preview-card">
-      <div class="preview-img-box">
-        <img id="preview-img" src="" alt="Captured road sample">
-      </div>
-      <div class="preview-actions">
-        <button class="btn-retake" onclick="resetPreview()">✕ Retake</button>
-        <button class="btn-analyze" id="analyze-btn" onclick="uploadAndRunInference()">
-          🧠 Run AI Inspection
-        </button>
-      </div>
-    </div>
-
-    <!-- Results Bottom Sheet -->
-    <div class="result-sheet" id="result-sheet">
-      <div class="result-sheet-header">
-        <div>
-          <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Detection Result</span>
-          <div class="damage-title" id="res-damage-title">Pothole Detected</div>
+      <!-- Aspect Ratio & Lens Mode Switcher Bar -->
+      <div class="aspect-deck">
+        <div class="aspect-deck-label">
+          <span>📐 Ratio:</span>
         </div>
-        <span class="priority-badge-lg p-critical" id="res-priority-badge">CRITICAL</span>
-      </div>
-
-      <!-- Severity Bar -->
-      <div class="severity-meter-box">
-        <span class="severity-meter-label">Damage Severity Score</span>
-        <div class="severity-bar-bg">
-          <div class="severity-bar-fill" id="res-severity-fill" style="width: 80%;"></div>
+        <div class="aspect-pills-row">
+          <button class="aspect-pill active" id="pill-ar-auto" onclick="setCameraAspectRatio('auto')" title="Auto-detect native camera sensor ratio">🔄 Auto</button>
+          <button class="aspect-pill" id="pill-ar-916" onclick="setCameraAspectRatio('9-16')" title="9:16 Vertical Phone Length">📱 9:16</button>
+          <button class="aspect-pill" id="pill-ar-43" onclick="setCameraAspectRatio('4-3')" title="4:3 Standard Aspect Ratio">📐 4:3</button>
+          <button class="aspect-pill" id="pill-ar-11" onclick="setCameraAspectRatio('1-1')" title="1:1 Square Focus Frame">⏹️ 1:1</button>
         </div>
-        <span class="severity-score-val" id="res-severity-score">8.5/10</span>
-      </div>
-
-      <!-- Annotated Bounding Box Image -->
-      <img id="res-annotated-img" class="annotated-result-img" src="" alt="AI Bounding Box Result">
-
-      <!-- Geolocation Details -->
-      <div class="geo-meta-card">
-        <div>📍 <strong>Location:</strong> <span id="res-coords">--</span></div>
-        <div>🛣️ <strong>Road / Area:</strong> <span id="res-road">--</span></div>
-        <div>🎯 <strong>Confidence:</strong> <span id="res-conf">--</span> | <strong>Objects:</strong> <span id="res-count">--</span></div>
-        <div>🛰️ <strong>Source:</strong> <span id="res-source" style="color:#38bdf8;">--</span></div>
-      </div>
-
-      <div class="result-sheet-actions">
-        <button class="btn-sheet-action primary" onclick="switchTab('map')">
-          🗺️ View on Map
-        </button>
-        <button class="btn-sheet-action" onclick="openDirectGoogleMaps()" style="color:#38bdf8;">
-          🧭 Google Maps
-        </button>
-        <button class="btn-sheet-action" onclick="resetAndScanAgain()">
-          📷 Scan Next
+        <button class="btn-lens-flip" onclick="flipCameraFacingMode()" title="Flip between Rear and Front Lens">
+          🔄
         </button>
       </div>
+
+      <!-- Live Viewfinder Outer Container -->
+      <div class="viewfinder-outer-shell ratio-auto" id="viewfinder-box">
+        <video id="camera-video" autoplay playsinline muted></video>
+        <canvas id="live-hud-canvas"></canvas>
+        <canvas id="camera-canvas" style="display:none;"></canvas>
+
+        <!-- Laser Scanning Animation Line -->
+        <div class="scanline" id="scanline"></div>
+
+        <!-- High-Tech HUD Viewfinder Reticle Graphic -->
+        <div class="hud-overlay">
+          <div class="hud-top-meta">
+            <span id="live-ai-status-label">YOLOv8 DUAL ENSEMBLE AI</span>
+            <span class="hud-telemetry-badge" id="hud-camera-telemetry">📹 DETECTING SENSOR...</span>
+          </div>
+
+          <div class="hud-target-box">
+            <div class="corner-bracket bracket-tl"></div>
+            <div class="corner-bracket bracket-tr"></div>
+            <div class="corner-bracket bracket-bl"></div>
+            <div class="corner-bracket bracket-br"></div>
+            <div class="crosshair-center"></div>
+          </div>
+
+          <div class="hud-bottom-meta">
+            <span id="hud-lens-explanation">SENSOR: STANDBY (TAP TO START)</span>
+            <span id="hud-fps-disp">30 FPS</span>
+          </div>
+        </div>
+
+        <!-- Live Camera Stream Activation Splash -->
+        <div class="viewfinder-splash" id="viewfinder-splash" onclick="startLiveCameraScanner()">
+          <span class="splash-icon">📹</span>
+          <p style="font-weight: 800; font-size: 16px; color: #f8fafc; font-family: 'Plus Jakarta Sans', sans-serif;">Start Live Camera Radar</p>
+          <p style="font-size: 12px; color: #94a3b8; max-width: 290px; line-height: 1.5; margin-bottom: 8px;">
+            Real-time pothole and road defect scanning with auto-detected camera aspect ratio.
+          </p>
+          <button class="btn-shutter" style="max-width: 220px; height: 44px; font-size: 13.5px;" onclick="event.stopPropagation(); startLiveCameraScanner();">
+            ▶ Start Camera Feed
+          </button>
+        </div>
+      </div>
+
+      <!-- Scanner Bottom Controls -->
+      <div class="scanner-controls">
+        
+        <!-- Primary Shutter Button -->
+        <div class="shutter-row">
+          <button class="btn-gallery-pick" onclick="triggerCameraCapture()" title="Open Gallery / Photos">
+            📁
+          </button>
+          <button class="btn-shutter" id="btn-shutter-main" onclick="handleShutterPress()">
+            📸 Snap Road Damage
+          </button>
+        </div>
+
+        <!-- Quick Location & Live AI Controls -->
+        <div class="quick-chips-row">
+          <button class="chip-btn" id="chip-live-ai-btn" onclick="toggleLiveAiScan()" style="border-color: #10b981; color: #059669; font-weight: 700;">
+            ⚡ Live AI Scan: OFF
+          </button>
+          <button class="chip-btn active" id="chip-gps-btn" onclick="acquireLocation(true)">
+            🛰️ My Live GPS
+          </button>
+          <button class="chip-btn" id="chip-watch-btn" onclick="toggleLiveTracking()">
+            📍 Auto Track: OFF
+          </button>
+          <button class="chip-btn" onclick="openManualCoordModal()">✏️ Lat/Lon</button>
+          <button class="chip-btn" onclick="jumpLocation('BANGALORE')">Bangalore</button>
+          <button class="chip-btn" onclick="jumpLocation('DELHI')">Delhi</button>
+          <button class="chip-btn" onclick="jumpLocation('MUMBAI')">Mumbai</button>
+          <button class="chip-btn" onclick="jumpLocation('HYDERABAD')">Hyderabad</button>
+          <button class="chip-btn" onclick="jumpLocation('CHENNAI')">Chennai</button>
+          <button class="chip-btn" onclick="jumpLocation('PUNE')">Pune</button>
+        </div>
+      </div>
+
+      <!-- Photo Preview Drawer (Before Detection) -->
+      <div class="preview-card" id="preview-card">
+        <div class="preview-img-box">
+          <img id="preview-img" src="" alt="Captured road sample">
+        </div>
+        <div class="preview-actions">
+          <button class="btn-retake" onclick="resetPreview()">✕ Retake</button>
+          <button class="btn-analyze" id="analyze-btn" onclick="uploadAndRunInference()">
+            🧠 Run AI Inspection
+          </button>
+        </div>
+      </div>
+
+      <!-- Results Bottom Sheet -->
+      <div class="result-sheet" id="result-sheet">
+        <div class="result-sheet-header">
+          <div>
+            <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Detection Result</span>
+            <div class="damage-title" id="res-damage-title">Pothole Detected</div>
+          </div>
+          <span class="priority-badge-lg p-critical" id="res-priority-badge">CRITICAL</span>
+        </div>
+
+        <!-- Severity Bar -->
+        <div class="severity-meter-box">
+          <span class="severity-meter-label">Damage Severity Score</span>
+          <div class="severity-bar-bg">
+            <div class="severity-bar-fill" id="res-severity-fill" style="width: 80%;"></div>
+          </div>
+          <span class="severity-score-val" id="res-severity-score">8.5/10</span>
+        </div>
+
+        <!-- Annotated Bounding Box Image -->
+        <img id="res-annotated-img" class="annotated-result-img" src="" alt="AI Bounding Box Result">
+
+        <!-- Geolocation Details -->
+        <div class="geo-meta-card">
+          <div>📍 <strong>Location:</strong> <span id="res-coords">--</span></div>
+          <div>🛣️ <strong>Road / Area:</strong> <span id="res-road">--</span></div>
+          <div>🎯 <strong>Confidence:</strong> <span id="res-conf">--</span> | <strong>Objects:</strong> <span id="res-count">--</span></div>
+          <div>🛰️ <strong>Source:</strong> <span id="res-source" style="color:var(--primary);">--</span></div>
+        </div>
+
+        <div class="result-sheet-actions">
+          <button class="btn-sheet-action primary" onclick="switchTab('map')">
+            🗺️ View on Map
+          </button>
+          <button class="btn-sheet-action" onclick="openDirectGoogleMaps()" style="color:var(--primary);">
+            🧭 Google Maps
+          </button>
+          <button class="btn-sheet-action" onclick="resetAndScanAgain()">
+            📷 Scan Next
+          </button>
+        </div>
+      </div>
+
     </div>
-
   </div>
 
   <!-- ==========================================
@@ -1054,11 +1300,11 @@
       <!-- Map Pinpoint Info Drawer -->
       <div class="map-bottom-drawer">
         <div style="flex:1; min-width:0; margin-right:10px;">
-          <span style="font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Selected Map Pin</span>
-          <div id="drawer-pin-road" style="font-size: 13px; font-weight: 700; color: #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          <span style="font-size: 10px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Selected Map Pin</span>
+          <div id="drawer-pin-road" style="font-size: 13px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             Tap anywhere to pin
           </div>
-          <div id="drawer-pin-coords" style="font-size: 11px; font-family: 'JetBrains Mono', monospace; color: #38bdf8;">
+          <div id="drawer-pin-coords" style="font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--primary);">
             12.97160° N, 77.59460° E
           </div>
         </div>
@@ -1125,16 +1371,16 @@
         <span>📍 Set Exact Coordinates</span>
         <button class="geo-modal-close" onclick="closeManualCoordModal()">✕</button>
       </div>
-      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px;">
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
         Type or paste latitude and longitude to pinpoint the road directly.
       </p>
       <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
         <div>
-          <label style="font-size:11px; font-weight:700; color:#cbd5e1;">Latitude (-90 to 90)</label>
+          <label style="font-size:11px; font-weight:700; color:#334155;">Latitude (-90 to 90)</label>
           <input type="number" step="any" id="manual-lat-input" class="geo-modal-input" placeholder="e.g. 12.9716">
         </div>
         <div>
-          <label style="font-size:11px; font-weight:700; color:#cbd5e1;">Longitude (-180 to 180)</label>
+          <label style="font-size:11px; font-weight:700; color:#334155;">Longitude (-180 to 180)</label>
           <input type="number" step="any" id="manual-lon-input" class="geo-modal-input" placeholder="e.g. 77.5946">
         </div>
       </div>
@@ -1153,8 +1399,8 @@
         <button class="geo-modal-close" onclick="closeGpsInfoModal()">✕</button>
       </div>
       <div style="display:flex; flex-direction:column; gap:8px; font-size:12px; margin-bottom:16px;">
-        <div><strong>Status:</strong> <span id="diag-status" style="color:#4ade80;">Active</span></div>
-        <div><strong>Provider:</strong> <span id="diag-provider" style="color:#38bdf8;">--</span></div>
+        <div><strong>Status:</strong> <span id="diag-status" style="color:var(--low); font-weight:700;">Active</span></div>
+        <div><strong>Provider:</strong> <span id="diag-provider" style="color:var(--primary); font-weight:600;">--</span></div>
         <div><strong>Coordinates:</strong> <span id="diag-coords" style="font-family:'JetBrains Mono',monospace;">--</span></div>
         <div><strong>Accuracy:</strong> <span id="diag-acc">--</span></div>
         <div><strong>Road / Area:</strong> <span id="diag-road">--</span></div>
@@ -1166,10 +1412,10 @@
     </div>
   </div>
 
-  <!-- Leaflet JS from High-Availability CDN with Fallback -->
+  <!-- Leaflet JS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script>
-    // State Variables
+    // Server Configuration & State
     const SERVER_GMAPS_KEY = "{{ google_maps_api_key }}";
     let activeGmapsKey = (new URLSearchParams(location.search).get('gkey') || localStorage.getItem('gmaps_api_key') || SERVER_GMAPS_KEY).trim();
 
@@ -1197,6 +1443,128 @@
     let currentFilter = 'ALL';
     let watchId = null;
     let isTracking = false;
+
+    // Camera & Aspect Ratio Engine State
+    let activeFacingMode = "environment"; // "environment" (rear) or "user" (front)
+    let selectedAspectRatio = localStorage.getItem('roadguard_aspect_ratio') || 'auto'; // 'auto' | '9-16' | '4-3' | '1-1'
+    let nativeSensorWidth = 1280;
+    let nativeSensorHeight = 720;
+    let nativeRatioValue = 9 / 16;
+    let nativeRatioLabel = "16:9 Landscape";
+
+    function triggerHaptic() {
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate(15); } catch(e){}
+      }
+    }
+
+    // ==========================================
+    // ASPECT RATIO & CAMERA ENGINE
+    // ==========================================
+    function setCameraAspectRatio(mode) {
+      triggerHaptic();
+      selectedAspectRatio = mode;
+      localStorage.setItem('roadguard_aspect_ratio', mode);
+
+      // Update pills UI
+      document.querySelectorAll('.aspect-pill').forEach(b => b.classList.remove('active'));
+      const activePill = document.getElementById(`pill-ar-${mode.replace('-', '')}`);
+      if (activePill) activePill.classList.add('active');
+
+      const box = document.getElementById('viewfinder-box');
+      box.classList.remove('ratio-auto', 'ratio-9-16', 'ratio-4-3', 'ratio-1-1');
+
+      if (mode === '9-16') {
+        box.classList.add('ratio-9-16');
+        showToast('📱 Mode: 9:16 Vertical Phone Length');
+      } else if (mode === '4-3') {
+        box.classList.add('ratio-4-3');
+        showToast('📐 Mode: 4:3 Standard Frame');
+      } else if (mode === '1-1') {
+        box.classList.add('ratio-1-1');
+        showToast('⏹️ Mode: 1:1 Square Focus Frame');
+      } else {
+        box.classList.add('ratio-auto');
+        showToast(`🔄 Mode: Auto Native (${nativeRatioLabel})`);
+      }
+
+      updateCameraTelemetryDisplay();
+      syncLiveHudCanvasSize();
+    }
+
+    function detectStreamDimensions(video) {
+      if (!video || !video.videoWidth || !video.videoHeight) return;
+      nativeSensorWidth = video.videoWidth;
+      nativeSensorHeight = video.videoHeight;
+      const ar = nativeSensorWidth / nativeSensorHeight;
+      nativeRatioValue = ar;
+
+      // Determine human-readable sensor aspect ratio description
+      if (Math.abs(ar - 9/16) < 0.05) {
+        nativeRatioLabel = "9:16 Portrait (Mobile)";
+      } else if (Math.abs(ar - 3/4) < 0.05) {
+        nativeRatioLabel = "3:4 Standard Portrait";
+      } else if (Math.abs(ar - 1) < 0.05) {
+        nativeRatioLabel = "1:1 Square";
+      } else if (Math.abs(ar - 4/3) < 0.05) {
+        nativeRatioLabel = "4:3 Standard Landscape";
+      } else if (Math.abs(ar - 16/9) < 0.05) {
+        nativeRatioLabel = "16:9 Landscape Wide";
+      } else {
+        nativeRatioLabel = `${ar < 1 ? (ar).toFixed(2) + ':1 Portrait' : (ar).toFixed(2) + ':1 Wide'}`;
+      }
+
+      // Set CSS variable on the viewfinder
+      const box = document.getElementById('viewfinder-box');
+      box.style.setProperty('--native-ratio', `${nativeSensorWidth} / ${nativeSensorHeight}`);
+
+      updateCameraTelemetryDisplay();
+      syncLiveHudCanvasSize();
+    }
+
+    function updateCameraTelemetryDisplay() {
+      const telemBadge = document.getElementById('hud-camera-telemetry');
+      const lensExpl = document.getElementById('hud-lens-explanation');
+
+      let currentModeDesc = selectedAspectRatio.toUpperCase();
+      if (selectedAspectRatio === 'auto') currentModeDesc = 'AUTO NATIVE';
+      else if (selectedAspectRatio === '9-16') currentModeDesc = '9:16 PHONE';
+      else if (selectedAspectRatio === '4-3') currentModeDesc = '4:3 STD';
+      else if (selectedAspectRatio === '1-1') currentModeDesc = '1:1 SQUARE';
+
+      if (telemBadge) {
+        telemBadge.innerText = `📹 ${nativeSensorWidth}×${nativeSensorHeight} • ${currentModeDesc}`;
+      }
+      if (lensExpl) {
+        lensExpl.innerText = `SENSOR: ${nativeSensorWidth}×${nativeSensorHeight} (${nativeRatioLabel})`;
+      }
+    }
+
+    async function flipCameraFacingMode() {
+      triggerHaptic();
+      activeFacingMode = (activeFacingMode === "environment") ? "user" : "environment";
+      showToast(activeFacingMode === "environment" ? "🔄 Switched to Rear Road Camera" : "🔄 Switched to Front Camera");
+      
+      const video = document.getElementById('camera-video');
+      if (video && video.srcObject) {
+        // Stop current tracks and restart stream
+        video.srcObject.getTracks().forEach(t => t.stop());
+        await startLiveCameraScanner();
+      }
+    }
+
+    function syncLiveHudCanvasSize() {
+      const canvas = document.getElementById('live-hud-canvas');
+      const video = document.getElementById('camera-video');
+      if (!canvas || !video) return;
+      const rect = video.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        if (canvas.width !== rect.width || canvas.height !== rect.height) {
+          canvas.width = rect.width;
+          canvas.height = rect.height;
+        }
+      }
+    }
 
     // Instant Google Maps Native Navigation
     function openDirectGoogleMaps() {
@@ -1237,10 +1605,12 @@
         if (googleMobileMarker) googleMobileMarker.setPosition({ lat: currentLat, lng: currentLon });
       } else if (tabId === 'feed') {
         fetchRecentIncidents();
+      } else if (tabId === 'scanner') {
+        syncLiveHudCanvasSize();
       }
     }
 
-    // 2. GIS Map Initialization (Google Maps if key present, else Leaflet OSM)
+    // 2. GIS Map Initialization
     async function initGISMap() {
       if (map || googleMobileMap) return;
 
@@ -1336,7 +1706,7 @@
 
       const pinIcon = L.divIcon({
         className: 'custom-map-pin',
-        html: `<div style="background:#ef4444; width:22px; height:22px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 15px rgba(239,68,68,0.9); display:flex; align-items:center; justify-content:center; color:#fff; font-size:10px;">📍</div>`,
+        html: `<div style="background:#2563eb; width:22px; height:22px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 12px rgba(37,99,235,0.7); display:flex; align-items:center; justify-content:center; color:#fff; font-size:10px;">📍</div>`,
         iconSize: [22, 22],
         iconAnchor: [11, 11]
       });
@@ -1348,16 +1718,9 @@
         updateLocationState(pt.lat, pt.lng, 0, 'Interactive Map Pin');
       });
 
-      map.on('click', function (e) {
+      map.on('click', function(e) {
         updateLocationState(e.latlng.lat, e.latlng.lng, 0, 'Interactive Map Pin');
       });
-
-      if (window.ResizeObserver) {
-        const ro = new ResizeObserver(() => {
-          if (map) map.invalidateSize();
-        });
-        ro.observe(document.getElementById('gis-fullmap'));
-      }
 
       refreshMapIncidents();
     }
@@ -1366,329 +1729,216 @@
       triggerHaptic();
       if (activeMapType === 'google' && googleMobileMap) {
         const currentType = googleMobileMap.getMapTypeId();
-        if (currentType === google.maps.MapTypeId.ROADMAP) {
-          googleMobileMap.setMapTypeId(google.maps.MapTypeId.HYBRID);
-          showToast('🛰️ Switched to Google Satellite');
-        } else {
-          googleMobileMap.setMapTypeId(google.maps.MapTypeId.ROADMAP);
-          showToast('🗺️ Switched to Google Street');
-        }
+        googleMobileMap.setMapTypeId(currentType === 'roadmap' ? 'satellite' : 'roadmap');
+        showToast(currentType === 'roadmap' ? '🛰️ Satellite Imagery' : '🗺️ Street Map');
         return;
       }
-
       if (!map) return;
+      isSatelliteMode = !isSatelliteMode;
       if (isSatelliteMode) {
-        map.removeLayer(satelliteTileLayer);
-        streetTileLayer.addTo(map);
-        isSatelliteMode = false;
-        showToast('🗺️ Switched to Street Map');
-      } else {
         map.removeLayer(streetTileLayer);
-        satelliteTileLayer.addTo(map);
-        isSatelliteMode = true;
-        showToast('🛰️ Switched to Satellite View');
+        map.addLayer(satelliteTileLayer);
+        showToast('🛰️ Satellite Imagery');
+      } else {
+        map.removeLayer(satelliteTileLayer);
+        map.addLayer(streetTileLayer);
+        showToast('🗺️ Street Map');
       }
     }
 
-    async function refreshMapIncidents() {
-      try {
-        const res = await fetch('/api/reports?priority=ALL');
-        const data = await res.json();
-        const prioColors = {
-          'CRITICAL': '#ef4444',
-          'HIGH': '#f97316',
-          'MEDIUM': '#eab308',
-          'LOW': '#22c55e'
-        };
-
-        if (activeMapType === 'google' && googleMobileMap) {
-          googleMobileMarkers.forEach(m => m.setMap(null));
-          googleMobileMarkers = [];
-          data.forEach(inc => {
-            if (inc.latitude && inc.longitude) {
-              const color = prioColors[inc.priority] || '#3b82f6';
-              const marker = new google.maps.Marker({
-                position: { lat: Number(inc.latitude), lng: Number(inc.longitude) },
-                map: googleMobileMap,
-                title: inc.damage_type,
-                icon: {
-                  path: google.maps.SymbolPath.CIRCLE,
-                  fillColor: color,
-                  fillOpacity: 0.9,
-                  scale: 7,
-                  strokeColor: '#ffffff',
-                  strokeWeight: 2
-                }
-              });
-              marker.addListener('click', () => {
-                showToast(`📍 ${inc.damage_type} (${inc.priority})`);
-              });
-              googleMobileMarkers.push(marker);
-            }
-          });
-        }
-
-        if (incidentsLayer) {
-          incidentsLayer.clearLayers();
-          data.forEach(inc => {
-            if (inc.latitude && inc.longitude) {
-              const color = prioColors[inc.priority] || '#3b82f6';
-              const circle = L.circleMarker([inc.latitude, inc.longitude], {
-                radius: 8,
-                fillColor: color,
-                color: '#ffffff',
-                weight: 2,
-                fillOpacity: 0.85
-              }).bindPopup(`
-                <div style="font-family:'Inter',sans-serif; color:#0f172a;">
-                  <b>${inc.damage_type || 'Road Damage'}</b><br>
-                  Priority: <b style="color:${color};">${inc.priority}</b><br>
-                  <small>${inc.address || ''}</small>
-                </div>
-              `);
-              incidentsLayer.addLayer(circle);
-            }
-          });
-        }
-      } catch (err) {
-        console.warn('Map points fetch error:', err);
+    function panActiveMobileMap(lat, lon, zoom = 16) {
+      if (activeMapType === 'google' && googleMobileMap) {
+        googleMobileMap.panTo({ lat, lng: lon });
+        if (zoom) googleMobileMap.setZoom(zoom);
+        if (googleMobileMarker) googleMobileMarker.setPosition({ lat, lng: lon });
+      } else if (map) {
+        map.setView([lat, lon], zoom);
+        if (mapMarker) mapMarker.setLatLng([lat, lon]);
       }
     }
 
-    // 3. Location State Management
-    function updateLocationState(lat, lon, acc, source) {
-      currentLat = Number(Number(lat).toFixed(6));
-      currentLon = Number(Number(lon).toFixed(6));
-      currentAccuracy = acc;
-      locationSource = source;
+    // 3. Location State Engine & Reverse Geocoding
+    let geocodeDebounce = null;
+    function updateLocationState(lat, lon, accuracy, source) {
+      currentLat = lat;
+      currentLon = lon;
+      currentAccuracy = accuracy || 0;
+      locationSource = source || 'Manual Pin';
 
-      if (mapMarker) mapMarker.setLatLng([currentLat, currentLon]);
-      if (googleMobileMarker) googleMobileMarker.setPosition({ lat: currentLat, lng: currentLon });
-
-      if (accuracyCircle && map) {
-        map.removeLayer(accuracyCircle);
-        accuracyCircle = null;
-      }
-      if (acc > 0 && map) {
-        accuracyCircle = L.circle([currentLat, currentLon], {
-          radius: acc,
-          color: '#38bdf8',
-          fillColor: '#38bdf8',
-          fillOpacity: 0.15,
-          weight: 1
-        }).addTo(map);
-      }
-
-      if (googleAccuracyCircle) googleAccuracyCircle.setMap(null);
-      if (acc > 0 && googleMobileMap) {
-        googleAccuracyCircle = new google.maps.Circle({
-          strokeColor: '#38bdf8',
-          strokeOpacity: 0.8,
-          strokeWeight: 1,
-          fillColor: '#38bdf8',
-          fillOpacity: 0.15,
-          map: googleMobileMap,
-          center: { lat: currentLat, lng: currentLon },
-          radius: acc
-        });
-      }
-
-      document.getElementById('live-coords').innerText = `${currentLat.toFixed(5)}° N, ${currentLon.toFixed(5)}° E`;
-      document.getElementById('drawer-pin-coords').innerText = `${currentLat.toFixed(5)}° N, ${currentLon.toFixed(5)}° E`;
-      document.getElementById('hud-accuracy-disp').innerText = acc > 0 ? `ACC: ±${Math.round(acc)}m` : `PINPOINT`;
+      const fmtCoords = `${lat.toFixed(5)}° N, ${lon.toFixed(5)}° E`;
+      document.getElementById('live-coords').innerText = fmtCoords;
+      document.getElementById('drawer-pin-coords').innerText = fmtCoords;
 
       const pill = document.getElementById('header-gps-pill');
       const pillText = document.getElementById('gps-pill-text');
-
-      if (source.includes('Satellite') || source.includes('Hardware')) {
+      if (source.includes('Satellite') || source.includes('Device')) {
         pill.className = 'header-status-pill';
-        pillText.innerText = `GPS ±${Math.round(acc)}m`;
-      } else if (source.includes('Network')) {
-        pill.className = 'header-status-pill';
-        pillText.innerText = `NET ±${Math.round(acc)}m`;
-      } else if (source.includes('IP')) {
-        pill.className = 'header-status-pill searching';
-        pillText.innerText = `IP GEO`;
+        pillText.innerText = accuracy ? `GPS ±${Math.round(accuracy)}M` : 'GPS ACTIVE';
       } else {
         pill.className = 'header-status-pill searching';
-        pillText.innerText = `PINNED`;
+        pillText.innerText = source.toUpperCase().slice(0, 15);
       }
 
-      reverseGeocode(currentLat, currentLon);
+      if (mapMarker) mapMarker.setLatLng([lat, lon]);
+      if (googleMobileMarker) googleMobileMarker.setPosition({ lat, lng: lon });
+
+      clearTimeout(geocodeDebounce);
+      geocodeDebounce = setTimeout(() => {
+        reverseGeocodeAddress(lat, lon);
+      }, 400);
     }
 
-    // 4. Multi-tier Geolocation Engine (Satellite -> Network -> IP -> Manual)
-    async function acquireLocation(userTriggered = false) {
-      if (userTriggered) triggerHaptic();
-
-      const pill = document.getElementById('header-gps-pill');
-      const pillText = document.getElementById('gps-pill-text');
-      pill.className = 'header-status-pill searching';
-      pillText.innerText = 'LOCATING...';
-
-      if (userTriggered) showToast('🛰️ Requesting fresh device GPS...');
-
-      if (!('geolocation' in navigator)) {
-        console.warn('Browser geolocation unsupported, using IP fallback');
-        await fallbackToIpLocation('No Browser GPS Support');
-        return;
-      }
-
-      // Tier 1: Real-time high accuracy satellite GPS (maximumAge: 0 forces fresh sensor reading)
-      const tryTier1 = () => new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          pos => resolve(pos),
-          err => reject(err),
-          { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-        );
-      });
-
-      // Tier 2: Network cell-tower / Wi-Fi triangulation
-      const tryTier2 = () => new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          pos => resolve(pos),
-          err => reject(err),
-          { enableHighAccuracy: false, timeout: 6000, maximumAge: 10000 }
-        );
-      });
-
+    async function reverseGeocodeAddress(lat, lon) {
       try {
-        const pos = await tryTier1();
-        handlePositionSuccess(pos, 'Device Satellite GPS');
-      } catch (err1) {
-        console.warn('Tier 1 GPS timeout/error:', err1.message, '- Trying Tier 2 Network...');
-        try {
-          const pos2 = await tryTier2();
-          handlePositionSuccess(pos2, 'Network Triangulation');
-        } catch (err2) {
-          console.warn('Tier 2 Network positioning failed:', err2.message, '- Trying Tier 3 IP...');
-          await fallbackToIpLocation('IP Geolocation (Approximate)');
-        }
-      }
-
-      // Start passive background GPS watcher to automatically upgrade to satellite lock once acquired
-      startPassiveGpsWatch();
-    }
-
-    let passiveGpsWatchId = null;
-    function startPassiveGpsWatch() {
-      if (!('geolocation' in navigator) || passiveGpsWatchId !== null) return;
-      try {
-        passiveGpsWatchId = navigator.geolocation.watchPosition(
-          (pos) => {
-            if (pos && pos.coords && pos.coords.accuracy < 100) {
-              handlePositionSuccess(pos, 'Device Satellite GPS');
-            }
-          },
-          (err) => {},
-          { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
-        );
-      } catch (e) {}
-    }
-
-    function panActiveMobileMap(lat, lon, zoom = 17) {
-      if (activeMapType === 'google' && googleMobileMap) {
-        googleMobileMap.panTo({ lat: Number(lat), lng: Number(lon) });
-        googleMobileMap.setZoom(zoom);
-      } else if (map) {
-        map.flyTo([lat, lon], zoom, { animate: true, duration: 1.2 });
-      }
-    }
-
-    function handlePositionSuccess(pos, sourceLabel) {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      const acc = pos.coords.accuracy || 5;
-      updateLocationState(lat, lon, acc, sourceLabel);
-      panActiveMobileMap(lat, lon, 17);
-      showToast(`✅ ${sourceLabel.includes('Satellite') ? 'GPS' : 'Location'} locked (±${Math.round(acc)}m)`);
-    }
-
-    async function fallbackToIpLocation(reason) {
-      try {
-        const res = await fetch('/api/geo/ip-lookup');
+        const res = await fetch(`/api/geo/reverse?lat=${lat}&lon=${lon}`);
         const data = await res.json();
-        if (data.latitude && data.longitude) {
-          updateLocationState(data.latitude, data.longitude, 2500, `${data.source || 'IP Location'} (${data.city || ''})`);
-          panActiveMobileMap(data.latitude, data.longitude, 15);
-          showToast(`📍 Positioned near ${data.city || 'your area'}`);
-        } else {
-          showToast('⚠️ Tap map or enter coordinates');
+        if (data.address) {
+          currentAddress = data.address;
+          document.getElementById('live-road-name').innerText = currentAddress;
+          document.getElementById('drawer-pin-road').innerText = currentAddress;
         }
       } catch (e) {
-        console.warn('IP location fetch failed:', e);
-        showToast('⚠️ Tap map to pinpoint location');
+        console.warn('Reverse geocode failed:', e);
       }
+    }
+
+    function acquireLocation(panToCenter = false) {
+      triggerHaptic();
+      const pillText = document.getElementById('gps-pill-text');
+      pillText.innerText = 'LOCATING...';
+
+      if (!('geolocation' in navigator)) {
+        showToast('⚠️ GPS not supported on device');
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          handlePositionSuccess(pos, 'Device Satellite GPS');
+          if (panToCenter) panActiveMobileMap(pos.coords.latitude, pos.coords.longitude, 17);
+          showToast(`🛰️ GPS Locked: ±${Math.round(pos.coords.accuracy)}m`);
+        },
+        (err) => {
+          console.warn('Geolocation warning:', err.message);
+          showToast('⚠️ GPS denied, using IP/City Pin');
+          updateLocationState(currentLat, currentLon, 50, 'City Baseline');
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    }
+
+    function handlePositionSuccess(pos, source) {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const acc = pos.coords.accuracy || 10;
+      updateLocationState(lat, lon, acc, source);
     }
 
     function toggleLiveTracking() {
       triggerHaptic();
-      const chipBtn = document.getElementById('chip-watch-btn');
+      isTracking = !isTracking;
+      const watchBtn = document.getElementById('chip-watch-btn');
       const fabBtn = document.getElementById('fab-tracking-btn');
 
       if (isTracking) {
-        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-        isTracking = false;
-        if (chipBtn) { chipBtn.classList.remove('active'); chipBtn.innerText = '📍 Auto Track: OFF'; }
-        if (fabBtn) { fabBtn.style.color = '#38bdf8'; fabBtn.title = 'Start Live Tracking'; }
-        showToast('⏹️ Live tracking stopped');
-      } else {
-        if (!('geolocation' in navigator)) {
-          showToast('⚠️ Geolocation not supported');
-          return;
-        }
-        isTracking = true;
-        if (chipBtn) { chipBtn.classList.add('active'); chipBtn.innerText = '📡 Auto Track: ON'; }
-        if (fabBtn) { fabBtn.style.color = '#4ade80'; fabBtn.title = 'Stop Live Tracking'; }
-        showToast('📡 Live continuous tracking active');
+        watchBtn.classList.add('active');
+        watchBtn.innerText = '📍 Auto Track: ON';
+        if (fabBtn) fabBtn.style.color = '#10b981';
+        showToast('📍 Live Continuous Tracking Active');
 
         watchId = navigator.geolocation.watchPosition(
           (pos) => {
-            const lat = pos.coords.latitude;
-            const lon = pos.coords.longitude;
-            const acc = pos.coords.accuracy || 3;
-            updateLocationState(lat, lon, acc, 'Live Continuous GPS');
+            handlePositionSuccess(pos, 'Continuous Auto-Tracker');
+            panActiveMobileMap(pos.coords.latitude, pos.coords.longitude);
           },
-          (err) => {
-            console.warn('Watch error:', err);
-          },
-          { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
+          (err) => console.warn('Watch error:', err),
+          { enableHighAccuracy: true, maximumAge: 3000 }
         );
+      } else {
+        watchBtn.classList.remove('active');
+        watchBtn.innerText = '📍 Auto Track: OFF';
+        if (fabBtn) fabBtn.style.color = '';
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+        showToast('⏹️ Continuous Tracking Paused');
       }
     }
 
-    // 5. Jump City Preset
     function jumpLocation(cityKey) {
       triggerHaptic();
-      if (CITIES[cityKey]) {
-        const c = CITIES[cityKey];
-        updateLocationState(c.lat, c.lon, 0, `City: ${c.name.split(',')[0]}`);
-        panActiveMobileMap(c.lat, c.lon, 16);
-        showToast(`📍 Jumped to ${c.name.split(',')[0]}`);
+      const c = CITIES[cityKey];
+      if (!c) return;
+      updateLocationState(c.lat, c.lon, 20, `${cityKey} Preset`);
+      panActiveMobileMap(c.lat, c.lon, 16);
+      showToast(`📍 Pinned to ${c.name}`);
+    }
+
+    // 4. Map Incidents Loader
+    async function refreshMapIncidents() {
+      try {
+        const res = await fetch('/api/reports');
+        const reports = await res.json();
+        allIncidents = reports;
+
+        // Render on Leaflet
+        if (map) {
+          incidentsLayer.clearLayers();
+          reports.forEach(r => {
+            let color = '#ef4444';
+            if (r.priority === 'HIGH') color = '#f97316';
+            else if (r.priority === 'MEDIUM') color = '#eab308';
+            else if (r.priority === 'LOW') color = '#22c55e';
+
+            const circle = L.circleMarker([r.latitude, r.longitude], {
+              radius: 8,
+              fillColor: color,
+              color: '#ffffff',
+              weight: 2,
+              opacity: 1,
+              fillOpacity: 0.85
+            });
+
+            circle.bindPopup(`
+              <div style="font-family:'Inter',sans-serif; min-width:140px;">
+                <strong style="color:#0f172a; font-size:13px;">${r.damage_type}</strong><br>
+                <span style="font-size:11px; color:#64748b;">${r.address || 'Road segment'}</span><br>
+                <span style="font-size:10px; font-weight:700; color:${color};">${r.priority} PRIORITY</span>
+              </div>
+            `);
+            incidentsLayer.addLayer(circle);
+          });
+        }
+
+        // Render on Google Maps
+        if (googleMobileMap) {
+          googleMobileMarkers.forEach(m => m.setMap(null));
+          googleMobileMarkers = [];
+          reports.forEach(r => {
+            let color = '#ef4444';
+            if (r.priority === 'HIGH') color = '#f97316';
+            else if (r.priority === 'MEDIUM') color = '#eab308';
+            else if (r.priority === 'LOW') color = '#22c55e';
+
+            const gmMarker = new google.maps.Marker({
+              position: { lat: r.latitude, lng: r.longitude },
+              map: googleMobileMap,
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                fillColor: color,
+                fillOpacity: 0.9,
+                scale: 7,
+                strokeColor: '#ffffff',
+                strokeWeight: 2
+              }
+            });
+            googleMobileMarkers.push(gmMarker);
+          });
+        }
+      } catch (e) {
+        console.warn('Map incidents fetch error:', e);
       }
     }
 
-    // 6. Reverse Geocode via Backend Proxy (Bypasses Render 403 / CORS)
-    let reverseGeocodeTimer = null;
-    function reverseGeocode(lat, lon) {
-      clearTimeout(reverseGeocodeTimer);
-      reverseGeocodeTimer = setTimeout(async () => {
-        try {
-          const res = await fetch(`/api/geo/reverse?lat=${lat}&lon=${lon}`);
-          const data = await res.json();
-          if (data && data.success && data.address) {
-            currentAddress = data.address;
-            document.getElementById('live-road-name').innerText = currentAddress;
-            document.getElementById('drawer-pin-road').innerText = currentAddress;
-          }
-        } catch (e) {
-          document.getElementById('live-road-name').innerText = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-        }
-      }, 350);
-    }
-
-    // 7. Interactive Road & City Search
+    // 5. Autocomplete Road Search
     let searchDebounce = null;
     function setupMapSearch() {
       const input = document.getElementById('map-search-input');
@@ -1710,8 +1960,8 @@
             if (data.results && data.results.length > 0) {
               dropdown.innerHTML = data.results.map(r => `
                 <div class="map-search-item" onclick="selectSearchResult(${r.lat}, ${r.lon}, '${(r.short_name || '').replace(/'/g, "\\'")}')">
-                  <strong style="color:#f8fafc;">${r.short_name || r.display_name}</strong>
-                  <span style="font-size:10px; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${r.display_name}</span>
+                  <strong style="color:#0f172a;">${r.short_name || r.display_name}</strong>
+                  <span style="font-size:11px; color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${r.display_name}</span>
                 </div>
               `).join('');
               dropdown.style.display = 'block';
@@ -1740,7 +1990,7 @@
       showToast(`📍 Pinned to ${name}`);
     }
 
-    // 8. Manual Coordinates Modal
+    // 6. Manual Coordinates Modal
     function openManualCoordModal() {
       triggerHaptic();
       document.getElementById('manual-lat-input').value = currentLat;
@@ -1784,7 +2034,7 @@
       }
     }
 
-    // 9. GPS Diagnostics Info Modal
+    // 7. GPS Diagnostics Info Modal
     function openGpsInfoModal() {
       triggerHaptic();
       document.getElementById('diag-provider').innerText = locationSource;
@@ -1799,7 +2049,7 @@
       document.getElementById('gps-diag-modal').style.display = 'none';
     }
 
-    // 10. Camera Trigger & File Handling
+    // 8. Camera Trigger & File Handling
     function triggerCameraCapture() {
       triggerHaptic();
       document.getElementById('file-capture').click();
@@ -1827,7 +2077,7 @@
       }
     }
 
-    // High-performance canvas compression: scales large 12-48MP mobile captures to 1024px (<250KB) in ~60ms
+    // Client-side canvas compression for ultra-fast network transmission
     function compressImageForYOLO(file, maxDim = 1024, quality = 0.82) {
       return new Promise((resolve) => {
         if (!file || !file.type.startsWith('image/')) {
@@ -1882,7 +2132,7 @@
       selectedFile = null;
     }
 
-    // 11. Upload & Run AI Inference (Ultra-fast async pipeline)
+    // 9. Upload & Run AI Inference
     async function uploadAndRunInference() {
       if (!selectedFile) return;
       triggerHaptic();
@@ -1892,7 +2142,7 @@
       btn.innerHTML = '<span class="loading-spinner"></span> Locking GPS & Compressing...';
       document.getElementById('scanline').style.display = 'block';
 
-      // 1. Fresh real-time device GPS check if not already on Satellite GPS
+      // 1. Fresh real-time device GPS check
       if (!locationSource.includes('Satellite') && !locationSource.includes('Device') && 'geolocation' in navigator) {
         try {
           const freshPos = await new Promise((resolve, reject) => {
@@ -1911,7 +2161,7 @@
         }
       }
 
-      // 2. Client-side canvas compression (turns 8MB raw upload into 150KB for 10x-30x upload speedup)
+      // 2. Client-side canvas compression
       btn.innerHTML = '<span class="loading-spinner"></span> Uploading Image...';
       let fileToUpload = selectedFile;
       try {
@@ -1982,13 +2232,13 @@
       triggerHaptic();
       document.getElementById('result-sheet').style.display = 'none';
       resetPreview();
-      triggerCameraCapture();
+      handleShutterPress();
     }
 
-    // 12. Incident Log Feed Fetcher
+    // 10. Incident Log Feed Fetcher
     async function fetchRecentIncidents() {
       const container = document.getElementById('feed-list-container');
-      container.innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8;">Loading reports...</div>';
+      container.innerHTML = '<div style="text-align:center; padding:24px; color:#64748b;">Loading reports...</div>';
 
       try {
         const res = await fetch(`/api/reports?priority=${currentFilter}`);
@@ -1996,17 +2246,17 @@
         allIncidents = reports;
 
         if (reports.length === 0) {
-          container.innerHTML = '<div style="text-align:center; padding:30px; color:#94a3b8;">No incidents recorded yet. Take a photo to log one!</div>';
+          container.innerHTML = '<div style="text-align:center; padding:32px; color:#64748b;">No incidents recorded yet. Snap a photo to log one!</div>';
           return;
         }
 
         container.innerHTML = reports.map(r => `
           <div class="incident-item" onclick="openIncidentOnMap(${r.latitude}, ${r.longitude})">
-            <img class="incident-thumb" src="/uploads/${r.annotated_filename || r.image_filename}" onerror="this.src='https://placehold.co/100x100/1e293b/fff?text=Damage'" alt="thumb">
+            <img class="incident-thumb" src="/uploads/${r.annotated_filename || r.image_filename}" onerror="this.src='https://placehold.co/100x100/f1f5f9/475569?text=Damage'" alt="thumb">
             <div class="incident-details">
               <div class="incident-top">
                 <span class="incident-name">${r.damage_type}</span>
-                <span class="priority-badge-lg p-${r.priority.toLowerCase()}" style="font-size:9px; padding:2px 6px;">${r.priority}</span>
+                <span class="priority-badge-lg p-${r.priority.toLowerCase()}" style="font-size:9.5px; padding:2px 7px;">${r.priority}</span>
               </div>
               <div class="incident-road">📍 ${r.address || 'Road segment'}</div>
               <div class="incident-sub">${new Date(r.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} | Score: ${r.severity_score}/10</div>
@@ -2014,7 +2264,7 @@
           </div>
         `).join('');
       } catch (err) {
-        container.innerHTML = '<div style="text-align:center; padding:20px; color:#f87171;">Failed to load feed</div>';
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:#dc2626;">Failed to load feed</div>';
       }
     }
 
@@ -2033,7 +2283,7 @@
       updateLocationState(lat, lon, 0, 'Incident Selection');
     }
 
-    // 13. Toast Notification Helper
+    // 11. Toast Notification Helper
     let toastTimeout = null;
     function showToast(msg) {
       const box = document.getElementById('toast-box');
@@ -2043,18 +2293,11 @@
       toastTimeout = setTimeout(() => { box.classList.remove('show'); }, 3000);
     }
 
-    // 14. Haptic Vibration Helper
-    function triggerHaptic() {
-      if ('vibrate' in navigator) {
-        try { navigator.vibrate(15); } catch(e){}
-      }
-    }
-
-    // 15. Real-Time Live AI Camera Radar Loop
+    // 12. Real-Time Live AI Camera Radar Loop
     let liveAiActive = false;
     let liveAiBusy = false;
-    let liveAiInterval = null;
     let activeLiveDetections = [];
+    let liveAiTimeout = null;
 
     async function startLiveCameraScanner() {
       triggerHaptic();
@@ -2070,9 +2313,14 @@
       try {
         showToast('📹 Accessing camera feed...');
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
+          video: {
+            facingMode: { ideal: activeFacingMode },
+            width: { ideal: 1920, min: 640 },
+            height: { ideal: 1080, min: 480 }
+          },
           audio: false
         });
+
         video.srcObject = stream;
         video.setAttribute('playsinline', '');
         video.setAttribute('autoplay', '');
@@ -2080,12 +2328,19 @@
         video.style.display = 'block';
         if (splash) splash.style.display = 'none';
 
+        video.onloadedmetadata = () => {
+          detectStreamDimensions(video);
+          syncLiveHudCanvasSize();
+        };
+
         try {
           await video.play();
         } catch (playErr) {
           console.warn('Video play triggered:', playErr);
         }
 
+        detectStreamDimensions(video);
+        setCameraAspectRatio(selectedAspectRatio);
         startLiveAiScan();
         showToast('⚡ Live AI Camera Radar Active!');
       } catch (err) {
@@ -2098,7 +2353,6 @@
     function handleShutterPress() {
       triggerHaptic();
       const video = document.getElementById('camera-video');
-      // If live camera is actively streaming on screen, grab the frame directly!
       if (video && video.srcObject && video.videoWidth > 0 && !video.paused) {
         captureFrameFromLiveStream();
       } else {
@@ -2130,13 +2384,8 @@
         document.getElementById('preview-card').style.display = 'block';
         document.getElementById('result-sheet').style.display = 'none';
         document.getElementById('preview-card').scrollIntoView({ behavior: 'smooth' });
-        showToast('📷 Frame snapped! Running AI Inspection...');
-        uploadAndRunInference();
+        showToast('📷 Frame snapped! Tap Run AI Inspection.');
       }, 'image/jpeg', 0.85);
-    }
-
-    async function initLiveStreamIfSecure() {
-      // Background check without popping permission prematurely
     }
 
     function toggleLiveAiScan() {
@@ -2156,8 +2405,6 @@
       }
     }
 
-    let liveAiTimeout = null;
-
     function startLiveAiScan() {
       liveAiActive = true;
       liveAiBusy = false;
@@ -2165,14 +2412,14 @@
       if (chipBtn) {
         chipBtn.classList.add('active');
         chipBtn.innerText = '⚡ Live AI: ACTIVE';
-        chipBtn.style.background = 'rgba(52, 211, 153, 0.2)';
-        chipBtn.style.color = '#34d399';
-        chipBtn.style.borderColor = '#34d399';
+        chipBtn.style.background = '#ecfdf5';
+        chipBtn.style.color = '#059669';
+        chipBtn.style.borderColor = '#10b981';
       }
       const statusLabel = document.getElementById('live-ai-status-label');
       if (statusLabel) {
         statusLabel.innerText = '⚡ LIVE RADAR: SCANNING';
-        statusLabel.style.color = '#34d399';
+        statusLabel.style.color = '#38bdf8';
       }
 
       clearTimeout(liveAiTimeout);
@@ -2192,8 +2439,8 @@
         chipBtn.classList.remove('active');
         chipBtn.innerText = '⚡ Live AI: OFF';
         chipBtn.style.background = '';
-        chipBtn.style.color = '#34d399';
-        chipBtn.style.borderColor = '#34d399';
+        chipBtn.style.color = '#059669';
+        chipBtn.style.borderColor = '#10b981';
       }
       const statusLabel = document.getElementById('live-ai-status-label');
       if (statusLabel) {
@@ -2267,11 +2514,11 @@
             const top = activeLiveDetections[0];
             if (statusLabel) {
               statusLabel.innerText = `⚠️ ${top.class.toUpperCase()} (${Math.round(top.confidence * 100)}%)`;
-              statusLabel.style.color = '#f87171';
+              statusLabel.style.color = '#ef4444';
             }
           } else if (statusLabel) {
             statusLabel.innerText = '⚡ LIVE RADAR: SCANNING (ROAD CLEAR)';
-            statusLabel.style.color = '#34d399';
+            statusLabel.style.color = '#38bdf8';
           }
         }
       } catch (e) {
@@ -2312,18 +2559,18 @@
         const h = (ny2 - ny1) * canvas.height;
 
         let strokeColor = '#38bdf8';
-        let fillColor = 'rgba(56, 189, 248, 0.15)';
+        let fillColor = 'rgba(56, 189, 248, 0.18)';
         const cLow = (d.raw_cls || '').toLowerCase();
 
         if (cLow.includes('pothole') || cLow.includes('hole')) {
           strokeColor = '#ef4444'; // Red
-          fillColor = 'rgba(239, 68, 68, 0.18)';
+          fillColor = 'rgba(239, 68, 68, 0.22)';
         } else if (cLow.includes('alligator')) {
           strokeColor = '#f97316'; // Orange
-          fillColor = 'rgba(249, 115, 22, 0.18)';
+          fillColor = 'rgba(249, 115, 22, 0.22)';
         } else if (cLow.includes('transverse') || cLow.includes('longitudinal') || cLow.includes('crack')) {
           strokeColor = '#eab308'; // Amber
-          fillColor = 'rgba(234, 179, 8, 0.18)';
+          fillColor = 'rgba(234, 179, 8, 0.22)';
         }
 
         ctx.fillStyle = fillColor;
@@ -2335,7 +2582,7 @@
         const blen = Math.min(18, w / 3, h / 3);
         ctx.lineWidth = 3.5;
         ctx.beginPath(); ctx.moveTo(x1, y1 + blen); ctx.lineTo(x1, y1); ctx.lineTo(x1 + blen, y1); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1); ctx.lineTo(x1 + w, y1); ctx.lineTo(x1 + w, y1 + blen); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1); ctx.lineTo(x1 + w); ctx.lineTo(x1 + w, y1 + blen); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(x1, y1 + h - blen); ctx.lineTo(x1, y1 + h); ctx.lineTo(x1 + blen, y1 + h); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1 + h); ctx.lineTo(x1 + w, y1 + h); ctx.lineTo(x1 + w, y1 + h - blen); ctx.stroke();
 
@@ -2355,11 +2602,16 @@
       });
     }
 
-    // 16. Page Load Initializer
+    // Window Resize / Orientation Change Handler
+    window.addEventListener('resize', () => {
+      syncLiveHudCanvasSize();
+    });
+
+    // Page Load Initializer
     window.onload = () => {
-      initLiveStreamIfSecure();
       setupMapSearch();
-      acquireLocation(false); // Automatically acquires location on load!
+      acquireLocation(false);
+      setCameraAspectRatio(selectedAspectRatio);
     };
   </script>
 </body>
