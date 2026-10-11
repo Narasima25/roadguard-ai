@@ -6,6 +6,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["FLASK_DEBUG"] = "0"
 import gc
+import io
 import sqlite3
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -489,7 +490,6 @@ def detect_damage():
     img = cv2.imread(str(raw_path))
     if img is None:
         try:
-            from PIL import Image
             pil_img = Image.open(str(raw_path)).convert("RGB")
             img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         except Exception as e:
@@ -622,8 +622,6 @@ def detect_live_frame():
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     if img is None:
         try:
-            from PIL import Image
-            import io
             pil_img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
             img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         except Exception:
