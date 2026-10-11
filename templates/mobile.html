@@ -1160,6 +1160,7 @@
       <!-- Live Viewfinder Outer Container -->
       <div class="viewfinder-outer-shell ratio-auto" id="viewfinder-box">
         <video id="camera-video" autoplay playsinline muted></video>
+        <img id="sim-feed-img" style="display:none; position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:2;" alt="Simulated Road Feed">
         <canvas id="live-hud-canvas"></canvas>
         <canvas id="camera-canvas" style="display:none;"></canvas>
 
@@ -2386,6 +2387,10 @@
 
     function handleShutterPress() {
       triggerHaptic();
+      if (simulateLiveDefectActive) {
+        testSampleDefectInspection('pothole');
+        return;
+      }
       const video = document.getElementById('camera-video');
       if (video && video.srcObject && video.videoWidth > 0 && !video.paused) {
         captureFrameFromLiveStream();
@@ -2505,11 +2510,22 @@
       triggerHaptic();
       simulateLiveDefectActive = !simulateLiveDefectActive;
       const simBtn = document.getElementById('chip-sim-live-btn');
+      const simFeedImg = document.getElementById('sim-feed-img');
+      const splash = document.getElementById('viewfinder-splash');
+
+      const video = document.getElementById('camera-video');
+
       if (simulateLiveDefectActive) {
         if (!simDefectImg) {
           simDefectImg = new Image();
           simDefectImg.src = '/uploads/pothole_demo.jpg';
         }
+        if (simFeedImg) {
+          simFeedImg.src = '/uploads/pothole_demo.jpg';
+          simFeedImg.style.display = 'block';
+        }
+        if (video) video.style.display = 'none';
+        if (splash) splash.style.display = 'none';
         if (simBtn) {
           simBtn.classList.add('active');
           simBtn.innerText = '🧪 Live Sim: ON';
@@ -2517,11 +2533,18 @@
           simBtn.style.color = '#7c3aed';
           simBtn.style.borderColor = '#8b5cf6';
         }
+        syncLiveHudCanvasSize();
         if (!liveAiActive) {
           startLiveAiScan();
         }
-        showToast('🧪 Live defect radar simulation active (feeding test hazard frames)');
+        showToast('🧪 Live defect radar simulation active (road feed simulated in viewfinder)');
       } else {
+        if (simFeedImg) {
+          simFeedImg.style.display = 'none';
+        }
+        if (video && video.srcObject) {
+          video.style.display = 'block';
+        }
         if (simBtn) {
           simBtn.classList.remove('active');
           simBtn.innerText = '🧪 Live Sim: OFF';
@@ -2665,12 +2688,12 @@
 
       const vBox = document.getElementById('viewfinder-box');
       const rect = vBox ? vBox.getBoundingClientRect() : (video ? video.getBoundingClientRect() : { width: 360, height: 360 });
-      if (rect.width > 0 && rect.height > 0) {
-        if (canvas.width !== rect.width || canvas.height !== rect.height) {
-          canvas.width = rect.width;
-          canvas.height = rect.height;
+        const rw = Math.round(rect.width);
+        const rh = Math.round(rect.height);
+        if (Math.abs(canvas.width - rw) > 1 || Math.abs(canvas.height - rh) > 1) {
+          canvas.width = rw;
+          canvas.height = rh;
         }
-      }
 
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
