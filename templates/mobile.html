@@ -2594,7 +2594,7 @@
     async function runLiveAiFrame() {
       if (!liveAiActive || liveAiBusy) return;
       const video = document.getElementById('camera-video');
-      const hasVideo = video && video.readyState >= 2 && !video.paused && !video.ended && video.videoWidth > 0 && video.videoHeight > 0;
+      const hasVideo = video && video.readyState >= 2 && !video.paused && !video.ended && (video.videoWidth || 0) > 0;
 
       if (!hasVideo && !simulateLiveDefectActive) return;
 
@@ -2602,36 +2602,32 @@
       const frameStart = performance.now();
       try {
         const offCanvas = document.createElement('canvas');
-        offCanvas.width = 384;
-        offCanvas.height = 384;
+        offCanvas.width = 256;
+        offCanvas.height = 256;
         const ctx = offCanvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
 
         if (simulateLiveDefectActive && simDefectImg && simDefectImg.complete && simDefectImg.naturalWidth > 0) {
-          // Live simulation mode: feeds sample road defect into radar loop
-          ctx.drawImage(simDefectImg, 0, 0, 384, 384);
+          ctx.drawImage(simDefectImg, 0, 0, 256, 256);
         } else if (hasVideo) {
-          const vw = video.videoWidth;
-          const vh = video.videoHeight;
+          // Precise visible viewport crop matching 7fbe0f7
+          const vw = video.videoWidth || 1280;
+          const vh = video.videoHeight || 720;
           const rect = video.getBoundingClientRect();
-          const cw = rect.width || 360;
-          const ch = rect.height || 360;
+          const dw = rect.width || 360;
+          const dh = rect.height || 360;
+          const scale = Math.max(dw / vw, dh / vh);
+          const cropW = Math.min(vw, dw / scale);
+          const cropH = Math.min(vh, dh / scale);
+          const cropX = Math.max(0, (vw - cropW) / 2);
+          const cropY = Math.max(0, (vh - cropH) / 2);
 
-          // Accurate object-fit: cover visible viewport crop extraction
-          const scale = Math.max(cw / vw, ch / vh);
-          const visibleW = Math.min(vw, cw / scale);
-          const visibleH = Math.min(vh, ch / scale);
-          const cropX = Math.max(0, (vw - visibleW) / 2);
-          const cropY = Math.max(0, (vh - visibleH) / 2);
-
-          ctx.drawImage(video, cropX, cropY, visibleW, visibleH, 0, 0, 384, 384);
+          ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, 256, 256);
         } else {
           liveAiBusy = false;
           return;
         }
 
-        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.82));
+        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.55));
         if (!blob || !liveAiActive) {
           liveAiBusy = false;
           return;
@@ -2641,7 +2637,7 @@
         fd.append('image', blob, 'frame.jpg');
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 7000);
+        const timeoutId = setTimeout(() => controller.abort(), 2800);
 
         const res = await fetch('/api/detect/live', {
           method: 'POST',
@@ -2654,20 +2650,11 @@
         const data = await res.json();
 
         if (data && data.success && liveAiActive) {
-          const freshDetections = data.detections || [];
+          activeLiveDetections = data.detections || [];
+          drawLiveHudOverlay(activeLiveDetections);
+
+          // Live performance telemetry
           const now = performance.now();
-
-          // Temporal persistence smoothing: keeps bounding boxes stable without flickering
-          if (freshDetections.length > 0) {
-            persistentDetections = freshDetections;
-            persistExpiryTime = now + 1500; // Hold defect boxes on screen for 1.5s
-          } else if (now > persistExpiryTime) {
-            persistentDetections = [];
-          }
-
-          drawLiveHudOverlay(persistentDetections);
-
-          // Live performance telemetry computation
           const frameMs = Math.round(now - frameStart);
           liveFrameCount++;
           if (now - liveLastFpsTime >= 850) {
@@ -2682,9 +2669,9 @@
 
           const statusLabel = document.getElementById('live-ai-status-label');
           const targetBox = document.querySelector('.hud-target-box');
-          if (persistentDetections.length > 0) {
+          if (activeLiveDetections.length > 0) {
             triggerHaptic();
-            const top = persistentDetections[0];
+            const top = activeLiveDetections[0];
             const topRaw = (top.class || top.raw_cls || 'Hazard').toString().replace(/[-_]/g, ' ').trim();
             const topDisplay = topRaw.charAt(0).toUpperCase() + topRaw.slice(1);
             if (statusLabel) {
@@ -2723,16 +2710,13 @@
     function drawLiveHudOverlay(detections) {
       const canvas = document.getElementById('live-hud-canvas');
       const video = document.getElementById('camera-video');
-      if (!canvas) return;
+      if (!canvas || !video) return;
 
-      const vBox = document.getElementById('viewfinder-box');
-      const rect = vBox ? vBox.getBoundingClientRect() : (video ? video.getBoundingClientRect() : { width: 360, height: 360 });
-        const rw = Math.round(rect.width);
-        const rh = Math.round(rect.height);
-        if (Math.abs(canvas.width - rw) > 1 || Math.abs(canvas.height - rh) > 1) {
-          canvas.width = rw;
-          canvas.height = rh;
-        }
+      const rect = video.getBoundingClientRect();
+      if (Math.abs(canvas.width - rect.width) > 1 || Math.abs(canvas.height - rect.height) > 1) {
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+      }
 
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2774,32 +2758,32 @@
         ctx.beginPath(); ctx.moveTo(x1, y1 + h - blen); ctx.lineTo(x1, y1 + h); ctx.lineTo(x1 + blen, y1 + h); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1 + h); ctx.lineTo(x1 + w, y1 + h); ctx.lineTo(x1 + w, y1 + h - blen); ctx.stroke();
 
-        // Damage Name Label & Confidence Tag (Positioned above the box with high contrast)
+        // Damage Name Label & Confidence Tag (Positioned directly above the bounding box)
         const rawName = (d.class || d.raw_cls || 'Hazard').toString().replace(/[-_]/g, ' ').trim();
         const className = rawName.charAt(0).toUpperCase() + rawName.slice(1);
         const confVal = Math.round((d.confidence || 0) * 100);
         const tagText = `${className.toUpperCase()} ${confVal}%`;
 
-        ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         const tMetrics = ctx.measureText(tagText);
-        const tagW = Math.max(tMetrics.width + 16, 76);
-        const tagH = 24;
+        const tagW = Math.max(tMetrics.width + 14, 72);
+        const tagH = 22;
 
         // Position above box, fallback to inside top if near canvas upper edge
         const tagX = Math.max(2, Math.min(x1, canvas.width - tagW - 2));
-        const tagY = (y1 >= tagH + 2) ? (y1 - tagH - 1) : (y1 + 2);
+        const tagY = (y1 >= tagH + 2) ? (y1 - tagH - 2) : (y1 + 2);
 
         // Solid background pill with crisp white text
         ctx.save();
         ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 4;
         ctx.fillStyle = strokeColor;
         ctx.fillRect(tagX, tagY, tagW, tagH);
 
-        // White border for sharp definition
+        // White border for crisp visibility against dark asphalt
         ctx.shadowColor = 'transparent';
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.2;
         ctx.strokeRect(tagX, tagY, tagW, tagH);
 
         // Centered bold white typography
