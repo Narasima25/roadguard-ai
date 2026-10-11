@@ -944,6 +944,58 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
+    /* Touch Feedback & Micro-Interactions */
+    .kpi-card {
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .kpi-card:active, .btn:active, .chip:active, .incident-card:active, .tab-btn:active {
+      transform: scale(0.97) !important;
+    }
+    .kpi-card.kpi-active-filter {
+      border-color: var(--primary) !important;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25) !important;
+    }
+
+    /* Mobile Segmented Switcher */
+    .mobile-segmented-bar {
+      display: none;
+      background: #ffffff;
+      border: 1px solid var(--card-border);
+      border-radius: 9px;
+      padding: 4px;
+      margin-bottom: 12px;
+      gap: 6px;
+      box-shadow: var(--shadow-sm);
+    }
+    .mobile-seg-btn {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 7px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .mobile-seg-btn.active {
+      background: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+    }
+    .drawer-drag-pill {
+      display: none;
+    }
+
     /* Responsive */
     @media (max-width: 1024px) {
       .map-workspace {
@@ -961,22 +1013,90 @@
         align-items: stretch;
         gap: 10px;
       }
+      .brand-title {
+        font-size: 16px;
+      }
       .header-actions {
-        justify-content: space-between;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+      }
+      .header-actions .btn {
+        white-space: nowrap;
+        flex-shrink: 0;
       }
       .nav-tabs-bar {
         padding: 6px 14px;
+        -webkit-overflow-scrolling: touch;
       }
       .kpi-grid {
-        padding: 12px 14px;
+        padding: 10px 14px 6px 14px;
         grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+      .kpi-card {
+        padding: 12px;
+      }
+      .kpi-value {
+        font-size: 22px;
       }
       .view-content {
-        padding: 10px 14px 20px 14px;
+        padding: 8px 14px 24px 14px;
+      }
+      
+      /* Mobile Segmented Pane Switching */
+      .mobile-segmented-bar {
+        display: flex;
+      }
+      .map-workspace.mobile-show-feed .map-wrapper {
+        display: none !important;
+      }
+      .map-workspace.mobile-show-map .panel:not(.map-wrapper) {
+        display: none !important;
+      }
+      .map-wrapper {
+        min-height: 380px;
+        height: 54vh;
+      }
+      #map {
+        min-height: 380px;
+        height: 54vh;
+      }
+      .report-feed-list {
+        max-height: 62vh;
+      }
+
+      /* Bottom Sheet Drawer on Mobile Phones */
+      .drawer-overlay {
+        align-items: flex-end;
       }
       .drawer-panel {
         max-width: 100%;
+        height: auto;
+        max-height: 86vh;
+        border-radius: 20px 20px 0 0;
+        border-left: none;
+        border-top: 1px solid var(--card-border);
+        animation: slideUpDrawer 0.25s cubic-bezier(0.16, 1, 0.3, 1);
       }
+      .drawer-drag-pill {
+        width: 38px;
+        height: 5px;
+        background: #cbd5e1;
+        border-radius: 3px;
+        margin: 8px auto 2px auto;
+        display: block;
+      }
+      .drawer-body {
+        padding: 14px 16px 24px 16px;
+        gap: 14px;
+      }
+    }
+
+    @keyframes slideUpDrawer {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
     }
   </style>
 </head>
@@ -1038,8 +1158,9 @@
   </nav>
 
   <!-- KPI Metrics Ribbon -->
+  <!-- KPI Metrics Ribbon -->
   <section class="kpi-grid">
-    <div class="kpi-card kpi-total">
+    <div class="kpi-card kpi-total" onclick="filterByKpi('ALL')" title="Tap to view all road hazard pins">
       <div class="kpi-header">
         <span class="kpi-label">Total Road Hazards</span>
         <span class="kpi-icon">📍</span>
@@ -1048,7 +1169,7 @@
       <div class="kpi-subtext" id="kpi-total-sub">All cataloged damage pins</div>
     </div>
 
-    <div class="kpi-card kpi-critical">
+    <div class="kpi-card kpi-critical" onclick="filterByKpi('CRITICAL')" title="Tap to filter Critical hazard pins">
       <div class="kpi-header">
         <span class="kpi-label">Critical Priority</span>
         <span class="kpi-icon">🔴</span>
@@ -1057,7 +1178,7 @@
       <div class="kpi-subtext">Immediate vehicular danger</div>
     </div>
 
-    <div class="kpi-card kpi-high">
+    <div class="kpi-card kpi-high" onclick="filterByKpi('HIGH')" title="Tap to filter High priority pins">
       <div class="kpi-header">
         <span class="kpi-label">High Priority</span>
         <span class="kpi-icon">🟠</span>
@@ -1066,7 +1187,7 @@
       <div class="kpi-subtext">Structural asphalt fatigue</div>
     </div>
 
-    <div class="kpi-card kpi-medium">
+    <div class="kpi-card kpi-medium" onclick="filterByKpiStatus('IN_PROGRESS')" title="Tap to view dispatched repairs">
       <div class="kpi-header">
         <span class="kpi-label">Crews Dispatched</span>
         <span class="kpi-icon">🟡</span>
@@ -1075,7 +1196,7 @@
       <div class="kpi-subtext">Active repair work orders</div>
     </div>
 
-    <div class="kpi-card kpi-resolved">
+    <div class="kpi-card kpi-resolved" onclick="filterByKpiStatus('RESOLVED')" title="Tap to view resolved repairs">
       <div class="kpi-header">
         <span class="kpi-label">Resolved / Repaired</span>
         <span class="kpi-icon">🟢</span>
@@ -1084,7 +1205,7 @@
       <div class="kpi-subtext" id="kpi-res-pct">0% resolution efficiency</div>
     </div>
 
-    <div class="kpi-card kpi-pci">
+    <div class="kpi-card kpi-pci" onclick="switchView('analytics', document.querySelector('.tab-btn[data-tab=\'analytics\']'))" title="Tap to view full Road Health Analytics">
       <div class="kpi-header">
         <span class="kpi-label">Pavement Health (PCI)</span>
         <span class="kpi-icon">🛡️</span>
@@ -1100,7 +1221,17 @@
   <!-- TAB 1: GEOSPATIAL MAP OPS VIEW                           -->
   <!-- ======================================================== -->
   <main class="view-content active" id="view-map">
-    <div class="map-workspace">
+    <!-- Mobile Segmented View Switcher (Visible on Phones <768px) -->
+    <div class="mobile-segmented-bar" id="mobile-segmented-bar">
+      <button class="mobile-seg-btn active" id="btn-seg-map" onclick="setMobilePane('map')">
+        <span>🗺️</span> Map View
+      </button>
+      <button class="mobile-seg-btn" id="btn-seg-feed" onclick="setMobilePane('feed')">
+        <span>📋</span> Incident List (<span id="lbl-seg-count">0</span>)
+      </button>
+    </div>
+
+    <div class="map-workspace mobile-show-map">
       
       <!-- Interactive Geospatial Map -->
       <div class="panel map-wrapper">
@@ -1305,7 +1436,7 @@
       </div>
 
       <div class="dropzone" id="sandbox-dropzone" onclick="document.getElementById('sandbox-file-input').click()">
-        <input type="file" id="sandbox-file-input" accept="image/*" style="display:none;" onchange="handleSandboxUpload(event)">
+        <input type="file" id="sandbox-file-input" accept="image/*" capture="environment" style="display:none;" onchange="handleSandboxUpload(event)">
         <div style="font-size:42px; margin-bottom:10px;">📸</div>
         <h3 style="font-family:var(--font-display); font-size:16px; color:var(--text-main);">Drag & Drop Road Photo Here or Click to Browse</h3>
         <p style="font-size:12px; color:var(--text-muted); margin-top:6px;">
@@ -1324,6 +1455,7 @@
   <!-- ======================================================== -->
   <div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer(event)">
     <div class="drawer-panel" onclick="event.stopPropagation()">
+      <div class="drawer-drag-pill"></div>
       <div class="drawer-header">
         <div>
           <h3 id="drawer-title" style="font-family:var(--font-display); font-size:16px; font-weight:700;">Incident Telemetry</h3>
@@ -1533,8 +1665,59 @@
       'LOW': '#16a34a'
     };
 
+    function triggerHaptic() {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(12); } catch (e) {}
+      }
+    }
+
+    function setMobilePane(pane) {
+      triggerHaptic();
+      const ws = document.querySelector('.map-workspace');
+      const btnMap = document.getElementById('btn-seg-map');
+      const btnFeed = document.getElementById('btn-seg-feed');
+      if (!ws) return;
+      if (pane === 'map') {
+        ws.classList.remove('mobile-show-feed');
+        ws.classList.add('mobile-show-map');
+        if (btnMap) btnMap.classList.add('active');
+        if (btnFeed) btnFeed.classList.remove('active');
+        setTimeout(() => { if (leafletMap) leafletMap.invalidateSize(); }, 150);
+      } else {
+        ws.classList.remove('mobile-show-map');
+        ws.classList.add('mobile-show-feed');
+        if (btnFeed) btnFeed.classList.add('active');
+        if (btnMap) btnMap.classList.remove('active');
+      }
+    }
+
+    function filterByKpi(prio) {
+      triggerHaptic();
+      currentPriorityFilter = prio;
+      document.querySelectorAll('.filter-chips-row .chip').forEach(c => {
+        c.classList.toggle('active', c.innerText.toUpperCase().includes(prio) || (prio === 'ALL' && c.innerText === 'All'));
+      });
+      document.querySelectorAll('.kpi-card').forEach(k => k.classList.remove('kpi-active-filter'));
+      if (prio === 'CRITICAL') document.querySelector('.kpi-critical')?.classList.add('kpi-active-filter');
+      else if (prio === 'HIGH') document.querySelector('.kpi-high')?.classList.add('kpi-active-filter');
+      applyFiltersAndRender();
+      showToast(prio === 'ALL' ? 'Showing all road hazards' : `Filtered to ${prio} priority`, 'info');
+    }
+
+    function filterByKpiStatus(status) {
+      triggerHaptic();
+      switchView('registry', document.querySelector('.tab-btn[data-tab="registry"]'));
+      const sel = document.getElementById('registry-filter-status');
+      if (sel) {
+        sel.value = status;
+        applyRegistryFilters();
+      }
+      showToast(`Filtered registry by ${status}`, 'info');
+    }
+
     // 1. Tab View Switching
     function switchView(viewId, btnEl) {
+      triggerHaptic();
       document.querySelectorAll('.view-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
 
@@ -1712,6 +1895,8 @@
     function renderFeedList(reports) {
       const container = document.getElementById('report-feed-list');
       document.getElementById('lbl-incident-count').innerText = `${reports.length} Records`;
+      const segEl = document.getElementById('lbl-seg-count');
+      if (segEl) segEl.innerText = reports.length;
 
       if (reports.length === 0) {
         container.innerHTML = `
