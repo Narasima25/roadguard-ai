@@ -2602,15 +2602,15 @@
       const frameStart = performance.now();
       try {
         const offCanvas = document.createElement('canvas');
-        offCanvas.width = 256;
-        offCanvas.height = 256;
+        offCanvas.width = 384;
+        offCanvas.height = 384;
         const ctx = offCanvas.getContext('2d');
         ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'medium';
+        ctx.imageSmoothingQuality = 'high';
 
         if (simulateLiveDefectActive && simDefectImg && simDefectImg.complete && simDefectImg.naturalWidth > 0) {
           // Live simulation mode: feeds sample road defect into radar loop
-          ctx.drawImage(simDefectImg, 0, 0, 256, 256);
+          ctx.drawImage(simDefectImg, 0, 0, 384, 384);
         } else if (hasVideo) {
           const vw = video.videoWidth;
           const vh = video.videoHeight;
@@ -2625,13 +2625,13 @@
           const cropX = Math.max(0, (vw - visibleW) / 2);
           const cropY = Math.max(0, (vh - visibleH) / 2);
 
-          ctx.drawImage(video, cropX, cropY, visibleW, visibleH, 0, 0, 256, 256);
+          ctx.drawImage(video, cropX, cropY, visibleW, visibleH, 0, 0, 384, 384);
         } else {
           liveAiBusy = false;
           return;
         }
 
-        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.78));
+        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.82));
         if (!blob || !liveAiActive) {
           liveAiBusy = false;
           return;
@@ -2660,7 +2660,7 @@
           // Temporal persistence smoothing: keeps bounding boxes stable without flickering
           if (freshDetections.length > 0) {
             persistentDetections = freshDetections;
-            persistExpiryTime = now + 950; // Hold defect box for 950ms
+            persistExpiryTime = now + 1500; // Hold defect boxes on screen for 1.5s
           } else if (now > persistExpiryTime) {
             persistentDetections = [];
           }
