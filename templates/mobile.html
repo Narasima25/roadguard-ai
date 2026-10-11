@@ -2770,20 +2770,35 @@
         ctx.beginPath(); ctx.moveTo(x1, y1 + h - blen); ctx.lineTo(x1, y1 + h); ctx.lineTo(x1 + blen, y1 + h); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1 + h); ctx.lineTo(x1 + w, y1 + h); ctx.lineTo(x1 + w, y1 + h - blen); ctx.stroke();
 
-        // Smart Tag Position: if box is near top of screen (y1 < 28px), position inside box so it is never clipped
-        const tagText = `${d.class} ${Math.round(d.confidence * 100)}%`;
-        ctx.font = 'bold 11px sans-serif';
-        const tWidth = ctx.measureText(tagText).width;
-        const tagH = 18;
-        const tagY = (y1 > 28) ? (y1 - tagH - 4) : (y1 + 4);
+        // Damage Name Label & Confidence Tag (Positioned above the box)
+        const rawName = (d.class || d.raw_cls || 'Hazard').toString().replace(/[-_]/g, ' ').trim();
+        const className = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+        const confVal = Math.round((d.confidence || 0) * 100);
+        const tagText = `${className} ${confVal}%`;
 
+        ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        const tMetrics = ctx.measureText(tagText);
+        const tagW = Math.max(tMetrics.width + 16, 72);
+        const tagH = 22;
+
+        // Position above box with smart clamp, fallback to top interior if near screen edge
+        const tagX = Math.max(2, Math.min(x1, canvas.width - tagW - 2));
+        const tagY = (y1 >= tagH + 4) ? (y1 - tagH - 3) : (y1 + 4);
+
+        // Solid background badge with slight shadow
+        ctx.save();
         ctx.fillStyle = strokeColor;
-        ctx.beginPath();
-        ctx.roundRect ? ctx.roundRect(x1, tagY, tWidth + 12, tagH, 4) : ctx.rect(x1, tagY, tWidth + 12, tagH);
-        ctx.fill();
+        ctx.fillRect(tagX, tagY, tagW, tagH);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(tagX, tagY, tagW, tagH);
 
+        // Crisp white text centered in badge
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(tagText, x1 + 6, tagY + 13);
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        ctx.fillText(tagText, tagX + 8, tagY + (tagH / 2));
+        ctx.restore();
       });
     }
 
