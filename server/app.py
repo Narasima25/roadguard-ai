@@ -746,9 +746,12 @@ def geo_ip_lookup():
 
 @app.route("/api/reports", methods=["GET"])
 def get_reports():
-    """Returns list of reports with optional filtering"""
+    """Returns list of reports with multi-criteria filtering and search"""
     priority_filter = request.args.get("priority")
     status_filter = request.args.get("status")
+    damage_type_filter = request.args.get("damage_type")
+    search_query = request.args.get("search", "").strip()
+    sort_by = request.args.get("sort", "newest")
 
     query = "SELECT * FROM damage_reports WHERE 1=1"
     params = []
@@ -761,7 +764,21 @@ def get_reports():
         query += " AND status = ?"
         params.append(status_filter)
 
-    query += " ORDER BY timestamp DESC"
+    if damage_type_filter and damage_type_filter != "ALL":
+        query += " AND damage_type LIKE ?"
+        params.append(f"%{damage_type_filter}%")
+
+    if search_query:
+        query += " AND (address LIKE ? OR damage_type LIKE ? OR id LIKE ? OR officer_notes LIKE ?)"
+        wildcard = f"%{search_query}%"
+        params.extend([wildcard, wildcard, wildcard, wildcard])
+
+    if sort_by == "severity_desc":
+        query += " ORDER BY severity_score DESC, timestamp DESC"
+    elif sort_by == "oldest":
+        query += " ORDER BY timestamp ASC"
+    else:
+        query += " ORDER BY timestamp DESC"
 
     conn = get_db()
     rows = conn.execute(query, params).fetchall()
@@ -788,6 +805,133 @@ def update_report(report_id):
 
     return jsonify({"success": True, "message": "Updated successfully"})
 
+@app.route("/api/reports/<report_id>", methods=["DELETE"])
+def delete_report(report_id):
+    """Deletes or dismisses a damage report"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM damage_reports WHERE id = ?", (report_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "message": "Incident deleted successfully"})
+
+@app.route("/api/reports/export", methods=["GET"])
+def export_reports_csv():
+    """Exports all road damage reports as a formatted CSV spreadsheet"""
+    import io
+    import csv
+    from flask import Response
+
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM damage_reports ORDER BY timestamp DESC").fetchall()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Incident ID", "Timestamp", "Damage Type", "Priority", "Severity Score (1-10)",
+        "Confidence (%)", "Status", "Latitude", "Longitude", "Address", "Source", "Officer Notes"
+    ])
+
+    for r in rows:
+        conf_pct = f"{round((r['confidence'] or 0) * 100)}%"
+        writer.writerow([
+            r["id"], r["timestamp"], r["damage_type"], r["priority"], r["severity_score"],
+            conf_pct, r["status"], r["latitude"], r["longitude"], r["address"] or "",
+            r["source"] or "", r["officer_notes"] or ""
+        ])
+
+    csv_data = output.getvalue()
+    filename = f"roadguard_incidents_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.route("/api/analytics", methods=["GET"])
+def get_analytics():
+    """Detailed analytics and road health diagnostics for charts and metrics"""
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM damage_reports").fetchall()
+    conn.close()
+
+    total = len(rows)
+    if total == 0:
+        return jsonify({
+            "total": 0,
+            "pci_index": 100,
+            "avg_severity": 0.0,
+            "resolution_rate": 0,
+            "damage_types": {},
+            "priority_dist": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+            "status_dist": {"PENDING": 0, "IN_PROGRESS": 0, "RESOLVED": 0},
+            "severity_histogram": {str(i): 0 for i in range(1, 11)},
+            "hotspots": []
+        })
+
+    # Calculations
+    damage_types = {}
+    priority_dist = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    status_dist = {"PENDING": 0, "IN_PROGRESS": 0, "RESOLVED": 0}
+    severity_hist = {str(i): 0 for i in range(1, 11)}
+    addresses = {}
+    total_severity = 0
+    resolved_count = 0
+
+    for r in rows:
+        # Damage type aggregation
+        dtype = (r["damage_type"] or "Unknown").strip()
+        damage_types[dtype] = damage_types.get(dtype, 0) + 1
+
+        # Priority
+        p = r["priority"] or "LOW"
+        if p in priority_dist:
+            priority_dist[p] += 1
+
+        # Status
+        st = r["status"] or "PENDING"
+        if st in status_dist:
+            status_dist[st] += 1
+        if st == "RESOLVED":
+            resolved_count += 1
+
+        # Severity
+        score = int(r["severity_score"] or 1)
+        score = max(1, min(10, score))
+        severity_hist[str(score)] = severity_hist.get(str(score), 0) + 1
+        total_severity += score
+
+        # Address hotspots
+        addr = (r["address"] or "").strip()
+        if addr and addr not in ("--", "0.0000, 0.0000"):
+            # short addr
+            short = addr.split(",")[0].strip()
+            if short:
+                addresses[short] = addresses.get(short, 0) + 1
+
+    avg_sev = round(total_severity / total, 1)
+    res_rate = round((resolved_count / total) * 100) if total > 0 else 0
+
+    # Pavement Condition Index (PCI) estimated formula:
+    # Starts at 100, deducted by severity density and unresolved critical incidents
+    deduction = (avg_sev * 6.5) + (priority_dist["CRITICAL"] * 4.0) - (res_rate * 0.25)
+    pci_index = max(15, min(100, round(100 - deduction)))
+
+    hotspots = sorted([{"road": k, "count": v} for k, v in addresses.items()], key=lambda x: x["count"], reverse=True)[:5]
+
+    return jsonify({
+        "total": total,
+        "pci_index": pci_index,
+        "avg_severity": avg_sev,
+        "resolution_rate": res_rate,
+        "damage_types": damage_types,
+        "priority_dist": priority_dist,
+        "status_dist": status_dist,
+        "severity_histogram": severity_hist,
+        "hotspots": hotspots
+    })
+
 @app.route("/api/stats", methods=["GET"])
 def get_stats():
     """Dashboard statistics summary"""
@@ -798,6 +942,8 @@ def get_stats():
     medium = conn.execute("SELECT COUNT(*) FROM damage_reports WHERE priority = 'MEDIUM'").fetchone()[0]
     low = conn.execute("SELECT COUNT(*) FROM damage_reports WHERE priority = 'LOW'").fetchone()[0]
     resolved = conn.execute("SELECT COUNT(*) FROM damage_reports WHERE status = 'RESOLVED'").fetchone()[0]
+    in_progress = conn.execute("SELECT COUNT(*) FROM damage_reports WHERE status = 'IN_PROGRESS'").fetchone()[0]
+    pending = conn.execute("SELECT COUNT(*) FROM damage_reports WHERE status = 'PENDING'").fetchone()[0]
     conn.close()
 
     return jsonify({
@@ -807,33 +953,38 @@ def get_stats():
         "medium": medium,
         "low": low,
         "resolved": resolved,
+        "in_progress": in_progress,
+        "pending": pending,
         "model_loaded": model_source
     })
 
 @app.route("/api/seed-demo-data", methods=["POST"])
 def seed_demo_data():
-    """Populates 5 realistic Indian road damage pins for instant presentation demo"""
+    """Populates realistic Indian road damage incidents with geocoded addresses"""
     sample_points = [
-        {"lat": 12.9716, "lon": 77.5946, "type": "Pothole", "prio": "CRITICAL", "score": 9, "status": "PENDING"},
-        {"lat": 12.9784, "lon": 77.6012, "type": "Manhole Damage", "prio": "CRITICAL", "score": 8, "status": "IN_PROGRESS"},
-        {"lat": 12.9650, "lon": 77.5880, "type": "Alligator Crack", "prio": "HIGH", "score": 7, "status": "PENDING"},
-        {"lat": 12.9820, "lon": 77.5900, "type": "Transverse Crack", "prio": "MEDIUM", "score": 5, "status": "PENDING"},
-        {"lat": 12.9600, "lon": 77.6100, "type": "Longitudinal Crack", "prio": "LOW", "score": 3, "status": "RESOLVED"},
+        {"lat": 12.9716, "lon": 77.5946, "type": "Pothole", "prio": "CRITICAL", "score": 9, "status": "PENDING", "addr": "Mahatma Gandhi Rd, Bengaluru"},
+        {"lat": 12.9784, "lon": 77.6012, "type": "Manhole Depression", "prio": "CRITICAL", "score": 8, "status": "IN_PROGRESS", "addr": "Brigade Rd, Shanthala Nagar, Bengaluru"},
+        {"lat": 12.9650, "lon": 77.5880, "type": "Alligator Fatigue Crack", "prio": "HIGH", "score": 7, "status": "PENDING", "addr": "Richmond Rd, Langford Town, Bengaluru"},
+        {"lat": 12.9820, "lon": 77.5900, "type": "Transverse Crack", "prio": "MEDIUM", "score": 5, "status": "PENDING", "addr": "Cubbon Park Outer Perimeter, Bengaluru"},
+        {"lat": 12.9600, "lon": 77.6100, "type": "Longitudinal Crack", "prio": "LOW", "score": 3, "status": "RESOLVED", "addr": "Victoria Rd, Austin Town, Bengaluru"},
+        {"lat": 12.9352, "lon": 77.6245, "type": "Pothole Cluster", "prio": "CRITICAL", "score": 9, "status": "PENDING", "addr": "100 Feet Rd, Koramangala 4th Block, Bengaluru"},
+        {"lat": 12.9767, "lon": 77.5713, "type": "Drain Hole Hazard", "prio": "HIGH", "score": 7, "status": "IN_PROGRESS", "addr": "Majestic Railway Station Approach Rd, Bengaluru"},
+        {"lat": 12.9900, "lon": 77.6500, "type": "Severe Cavity", "prio": "CRITICAL", "score": 10, "status": "PENDING", "addr": "Old Airport Rd, Kodihalli, Bengaluru"}
     ]
     conn = get_db()
     for pt in sample_points:
         rid = str(uuid.uuid4())
         conn.execute("""
             INSERT INTO damage_reports 
-            (id, timestamp, latitude, longitude, image_filename, annotated_filename, damage_type, confidence, priority, severity_score, box_count, status, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, timestamp, latitude, longitude, image_filename, annotated_filename, damage_type, confidence, priority, severity_score, box_count, status, source, address)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             rid, datetime.now().isoformat(), pt["lat"], pt["lon"],
-            "demo.jpg", "demo.jpg", pt["type"], 0.88, pt["prio"], pt["score"], 1, pt["status"], "Demo Seed"
+            "demo.jpg", "demo.jpg", pt["type"], 0.89, pt["prio"], pt["score"], 1, pt["status"], "Field AI Scanner", pt["addr"]
         ))
     conn.commit()
     conn.close()
-    return jsonify({"success": True, "message": "Demo sample points created"})
+    return jsonify({"success": True, "message": f"Seeded {len(sample_points)} realistic road damage incidents"})
 
 def ensure_ssl_certs():
     cert_path = BASE_DIR / "server" / "cert.pem"
