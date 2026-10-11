@@ -1228,6 +1228,9 @@
           <button class="chip-btn" onclick="testSampleDefectInspection('crack')" style="border-color: #2563eb; color: #2563eb; font-weight: 700;">
             🛣️ Test Crack
           </button>
+          <button class="chip-btn" onclick="openTargetTestModal()" style="border-color: #f59e0b; color: #d97706; font-weight: 700;">
+            🎯 Open Target Card
+          </button>
           <button class="chip-btn active" id="chip-gps-btn" onclick="acquireLocation(true)">
             🛰️ My Live GPS
           </button>
@@ -1435,6 +1438,28 @@
       <div style="display:flex; gap:8px;">
         <button class="btn-sheet-action primary" onclick="acquireLocation(true); closeGpsInfoModal();">🔄 Refresh GPS</button>
         <button class="btn-sheet-action" onclick="closeGpsInfoModal(); switchTab('map');">🗺️ View Map</button>
+      </div>
+    </div>
+  <!-- High-Contrast Defect Detection Target Modal -->
+  <div class="geo-modal-overlay" id="target-test-modal" style="display:none;">
+    <div class="geo-modal-box" style="max-width: 440px; padding: 18px;">
+      <div class="geo-modal-title">
+        <span>🎯 AI Detection Target Card</span>
+        <button class="geo-modal-close" onclick="closeTargetTestModal()">✕</button>
+      </div>
+      <p style="font-size:12px; color:#64748b; margin-bottom:12px; line-height:1.4;">
+        Point your phone camera or laptop webcam at this card to test real-time AI radar detection immediately.
+      </p>
+      <div style="border-radius:12px; overflow:hidden; border:2px solid #cbd5e1; margin-bottom:12px; background:#000;">
+        <img src="/uploads/pothole_demo.jpg" alt="Pothole Target" style="width:100%; height:auto; display:block;">
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-sheet-action primary" onclick="closeTargetTestModal(); toggleSimulateLiveDefect();">
+          ⚡ Run in Viewfinder
+        </button>
+        <button class="btn-sheet-action" onclick="closeTargetTestModal(); testSampleDefectInspection('pothole');">
+          📸 Run Full Inspection
+        </button>
       </div>
     </div>
   </div>
@@ -2076,6 +2101,15 @@
       document.getElementById('gps-diag-modal').style.display = 'none';
     }
 
+    function openTargetTestModal() {
+      triggerHaptic();
+      document.getElementById('target-test-modal').style.display = 'flex';
+    }
+
+    function closeTargetTestModal() {
+      document.getElementById('target-test-modal').style.display = 'none';
+    }
+
     // 8. Camera Trigger & File Handling
     function triggerCameraCapture() {
       triggerHaptic();
@@ -2503,7 +2537,8 @@
     let persistentDetections = [];
     let persistExpiryTime = 0;
     let simulateLiveDefectActive = false;
-    let simDefectImg = null;
+    let simDefectImg = new Image();
+    simDefectImg.src = '/uploads/pothole_demo.jpg';
     let simToggleIndex = 0;
 
     function toggleSimulateLiveDefect() {
