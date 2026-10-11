@@ -485,10 +485,16 @@ def detect_damage():
             lon_val = round(77.5946 + float(np.random.uniform(-0.02, 0.02)), 6)
             location_source = "Default Coordinates"
 
-    # Read image with OpenCV
+    # Read image with OpenCV, fallback to PIL for mobile formats (HEIC, WebP, RGBA)
     img = cv2.imread(str(raw_path))
     if img is None:
-        return jsonify({"error": "Invalid image format"}), 400
+        try:
+            from PIL import Image
+            pil_img = Image.open(str(raw_path)).convert("RGB")
+            img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            print(f"Image read error: {e}")
+            return jsonify({"error": "Invalid image format"}), 400
     
     img_h, img_w = img.shape[:2]
 
@@ -615,7 +621,13 @@ def detect_live_frame():
     file_bytes = np.frombuffer(image_file.read(), np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     if img is None:
-        return jsonify({"success": False, "detections": []}), 400
+        try:
+            from PIL import Image
+            import io
+            pil_img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
+            img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+        except Exception:
+            return jsonify({"success": False, "detections": []}), 400
 
     img_h, img_w = img.shape[:2]
 

@@ -2065,14 +2065,17 @@
       document.getElementById('preview-card').style.display = 'block';
       document.getElementById('result-sheet').style.display = 'none';
       document.getElementById('preview-card').scrollIntoView({ behavior: 'smooth' });
-      showToast('📷 Photo captured. Tap Run AI Inspection.');
+      showToast('📷 Image loaded. Running AI inspection...');
 
-      // Proactively refresh high-accuracy GPS in background while reviewing photo
+      // Immediately execute detection pipeline
+      uploadAndRunInference();
+
+      // Non-blocking background GPS refresh
       if ('geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition(
           pos => handlePositionSuccess(pos, 'Device Satellite GPS'),
           err => console.warn('Background GPS update:', err.message),
-          { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
         );
       }
     }
@@ -2132,42 +2135,36 @@
       selectedFile = null;
     }
 
-    // 9. Upload & Run AI Inference
+    // 9. Upload & Run AI Inference (Immediate, resilient pipeline)
     async function uploadAndRunInference() {
       if (!selectedFile) return;
       triggerHaptic();
 
       const btn = document.getElementById('analyze-btn');
       btn.disabled = true;
-      btn.innerHTML = '<span class="loading-spinner"></span> Locking GPS & Compressing...';
+      btn.innerHTML = '<span class="loading-spinner"></span> YOLOv8 Inspecting...';
       document.getElementById('scanline').style.display = 'block';
 
-      // 1. Fresh real-time device GPS check
+      // 1. Non-blocking GPS check: refresh in background without delaying detection
       if (!locationSource.includes('Satellite') && !locationSource.includes('Device') && 'geolocation' in navigator) {
-        try {
-          const freshPos = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 3000,
-              maximumAge: 0
-            });
-          });
-          const lat = freshPos.coords.latitude;
-          const lon = freshPos.coords.longitude;
-          const acc = freshPos.coords.accuracy || 5;
-          updateLocationState(lat, lon, acc, 'Device Satellite GPS');
-        } catch (gpsErr) {
-          console.warn('Live GPS lock skipped, using current coordinates:', gpsErr);
-        }
+        navigator.geolocation.getCurrentPosition(
+          freshPos => {
+            const lat = freshPos.coords.latitude;
+            const lon = freshPos.coords.longitude;
+            const acc = freshPos.coords.accuracy || 5;
+            updateLocationState(lat, lon, acc, 'Device Satellite GPS');
+          },
+          err => console.warn('Background GPS refresh:', err.message),
+          { enableHighAccuracy: true, timeout: 4000, maximumAge: 0 }
+        );
       }
 
-      // 2. Client-side canvas compression
-      btn.innerHTML = '<span class="loading-spinner"></span> Uploading Image...';
+      // 2. Client-side canvas compression for rapid upload
       let fileToUpload = selectedFile;
       try {
         fileToUpload = await compressImageForYOLO(selectedFile, 1024, 0.82);
       } catch (compErr) {
-        console.warn('Compression error, falling back to original file:', compErr);
+        console.warn('Compression error, using original file:', compErr);
       }
 
       const formData = new FormData();
@@ -2178,7 +2175,6 @@
       formData.append('address', currentAddress);
       formData.append('source', locationSource);
 
-      btn.innerHTML = '<span class="loading-spinner"></span> YOLOv8 Processing...';
       try {
         const res = await fetch('/api/detect', { method: 'POST', body: formData });
         const data = await res.json();
@@ -2188,7 +2184,11 @@
             updateLocationState(data.latitude, data.longitude, 5, 'Photo EXIF GPS');
           }
           displayResult(data);
-          showToast(`✅ ${data.damage_type} detected (${data.priority})`);
+          if (data.detected_count > 0) {
+            showToast(`✅ ${data.damage_type} detected (${data.priority})`);
+          } else {
+            showToast('✅ Inspection complete: Road surface clear');
+          }
           if (map) refreshMapIncidents();
         } else {
           alert('Detection failed: ' + (data.error || 'Server error'));
@@ -2205,22 +2205,32 @@
 
     function displayResult(data) {
       const sheet = document.getElementById('result-sheet');
-      document.getElementById('res-damage-title').innerText = `${data.damage_type} (${data.detected_count} found)`;
-
       const badge = document.getElementById('res-priority-badge');
-      badge.innerText = data.priority;
-      badge.className = `priority-badge-lg p-${data.priority.toLowerCase()}`;
 
-      // Severity bar
-      const score = data.severity_score || 5;
-      document.getElementById('res-severity-score').innerText = `${score}/10`;
-      document.getElementById('res-severity-fill').style.width = `${score * 10}%`;
+      if (data.detected_count && data.detected_count > 0) {
+        document.getElementById('res-damage-title').innerText = `${data.damage_type} (${data.detected_count} found)`;
+        badge.innerText = data.priority;
+        badge.className = `priority-badge-lg p-${data.priority.toLowerCase()}`;
+        
+        const score = data.severity_score || 5;
+        document.getElementById('res-severity-score').innerText = `${score}/10`;
+        document.getElementById('res-severity-fill').style.width = `${score * 10}%`;
+        document.getElementById('res-conf').innerText = `${Math.round(data.confidence * 100)}%`;
+        document.getElementById('res-count').innerText = `${data.detected_count} bounding boxes`;
+      } else {
+        document.getElementById('res-damage-title').innerText = 'Road Clear (0 Hazards Found)';
+        badge.innerText = 'CLEAR';
+        badge.className = 'priority-badge-lg p-low';
+
+        document.getElementById('res-severity-score').innerText = '0/10';
+        document.getElementById('res-severity-fill').style.width = '4%';
+        document.getElementById('res-conf').innerText = 'Clear';
+        document.getElementById('res-count').innerText = '0 hazards detected';
+      }
 
       document.getElementById('res-annotated-img').src = data.annotated_url;
       document.getElementById('res-coords').innerText = `${Number(data.latitude).toFixed(5)}° N, ${Number(data.longitude).toFixed(5)}° E`;
       document.getElementById('res-road').innerText = data.address || currentAddress;
-      document.getElementById('res-conf').innerText = `${Math.round(data.confidence * 100)}%`;
-      document.getElementById('res-count').innerText = `${data.detected_count} bounding boxes`;
       document.getElementById('res-source').innerText = data.location_source || 'Live Sensor';
 
       sheet.style.display = 'block';
@@ -2311,12 +2321,10 @@
       }
 
       try {
-        showToast('📹 Accessing camera feed...');
+        showToast('📹 Opening camera feed...');
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: { ideal: activeFacingMode },
-            width: { ideal: 1920, min: 640 },
-            height: { ideal: 1080, min: 480 }
+            facingMode: { ideal: activeFacingMode }
           },
           audio: false
         });
@@ -2345,7 +2353,7 @@
         showToast('⚡ Live AI Camera Radar Active!');
       } catch (err) {
         console.error('Camera stream access failed:', err);
-        showToast('⚠️ Camera permission denied. Opening photo picker...');
+        showToast('⚠️ Camera access unavailable. Opening photo picker...');
         triggerCameraCapture();
       }
     }
@@ -2384,7 +2392,8 @@
         document.getElementById('preview-card').style.display = 'block';
         document.getElementById('result-sheet').style.display = 'none';
         document.getElementById('preview-card').scrollIntoView({ behavior: 'smooth' });
-        showToast('📷 Frame snapped! Tap Run AI Inspection.');
+        showToast('📷 Frame snapped! Running AI inspection...');
+        uploadAndRunInference();
       }, 'image/jpeg', 0.85);
     }
 
@@ -2460,7 +2469,7 @@
     async function runLiveAiFrame() {
       if (!liveAiActive || liveAiBusy) return;
       const video = document.getElementById('camera-video');
-      if (!video || video.readyState < 2 || video.paused || video.ended) return;
+      if (!video || video.readyState < 2 || video.paused || video.ended || !video.videoWidth) return;
 
       liveAiBusy = true;
       try {
@@ -2468,20 +2477,7 @@
         offCanvas.width = 256;
         offCanvas.height = 256;
         const ctx = offCanvas.getContext('2d');
-
-        // Extract precise visible viewport crop so normalized boxes map 1:1 onto screen
-        const vw = video.videoWidth || 1280;
-        const vh = video.videoHeight || 720;
-        const rect = video.getBoundingClientRect();
-        const dw = rect.width || 360;
-        const dh = rect.height || 360;
-        const scale = Math.max(dw / vw, dh / vh);
-        const cropW = Math.min(vw, dw / scale);
-        const cropH = Math.min(vh, dh / scale);
-        const cropX = Math.max(0, (vw - cropW) / 2);
-        const cropY = Math.max(0, (vh - cropH) / 2);
-
-        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, 256, 256);
+        ctx.drawImage(video, 0, 0, 256, 256);
 
         const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.55));
         if (!blob || !liveAiActive) {
