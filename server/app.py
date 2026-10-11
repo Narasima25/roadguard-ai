@@ -11,7 +11,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template, send_from_directory, make_response
 from flask_cors import CORS
 import cv2  # type: ignore
 import numpy as np  # type: ignore
@@ -429,10 +429,14 @@ def dashboard_view():
 @app.route("/mobile")
 def mobile_view():
     """Serves the Mobile Camera & GPS capture interface"""
-    return render_template(
+    resp = make_response(render_template(
         "mobile.html",
         google_maps_api_key=GOOGLE_MAPS_API_KEY
-    )
+    ))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 @app.route("/uploads/<path:filename>")
 def serve_upload(filename):
@@ -637,9 +641,9 @@ def detect_live_frame():
 
     raw_candidates = []
     if pothole_session is not None:
-        raw_candidates.extend(run_onnx_inference(pothole_session, img, 0.15, POTHOLE_NAMES, False))
+        raw_candidates.extend(run_onnx_inference(pothole_session, img, 0.12, POTHOLE_NAMES, False))
     if crack_session is not None:
-        raw_candidates.extend(run_onnx_inference(crack_session, img, 0.15, CRACK_NAMES, True))
+        raw_candidates.extend(run_onnx_inference(crack_session, img, 0.12, CRACK_NAMES, True))
 
     detections = apply_nms(raw_candidates, 0.40)
     del img
