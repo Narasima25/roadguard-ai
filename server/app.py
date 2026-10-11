@@ -240,9 +240,9 @@ def load_ai_model():
     c_onnx = MODELS_DIR / "cracks.onnx"
 
     opts = ort.SessionOptions()
-    opts.intra_op_num_threads = 1
-    opts.inter_op_num_threads = 1
-    opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    opts.intra_op_num_threads = 4
+    opts.inter_op_num_threads = 2
+    opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
     if p_onnx.exists():
         print(f"[OK] Loading ONNX Pothole model: {p_onnx}")
@@ -1081,6 +1081,6 @@ if __name__ == "__main__":
     debug_mode = os.environ.get("FLASK_DEBUG") == "1"
     if use_https:
         cert_p, key_p = ensure_ssl_certs()
-        app.run(host="0.0.0.0", port=port, ssl_context=(cert_p, key_p), debug=debug_mode, use_reloader=False)
+        app.run(host="0.0.0.0", port=port, ssl_context=(cert_p, key_p), debug=debug_mode, use_reloader=False, threaded=True)
     else:
-        app.run(host="0.0.0.0", port=port, debug=debug_mode, use_reloader=False)
+        app.run(host="0.0.0.0", port=port, debug=debug_mode, use_reloader=False, threaded=True)

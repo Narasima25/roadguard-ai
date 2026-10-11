@@ -2466,12 +2466,17 @@
       }
     }
 
+    let liveFrameCount = 0;
+    let liveLastFpsTime = performance.now();
+    let liveFpsCurrent = 16;
+
     async function runLiveAiFrame() {
       if (!liveAiActive || liveAiBusy) return;
       const video = document.getElementById('camera-video');
       if (!video || video.readyState < 2 || video.paused || video.ended || !video.videoWidth) return;
 
       liveAiBusy = true;
+      const frameStart = performance.now();
       try {
         const offCanvas = document.createElement('canvas');
         offCanvas.width = 256;
@@ -2504,6 +2509,21 @@
         if (data && data.success && liveAiActive) {
           activeLiveDetections = data.detections || [];
           drawLiveHudOverlay(activeLiveDetections);
+
+          // Live performance telemetry computation
+          const now = performance.now();
+          const frameMs = Math.round(now - frameStart);
+          liveFrameCount++;
+          if (now - liveLastFpsTime >= 900) {
+            liveFpsCurrent = Math.max(1, Math.round((liveFrameCount * 1000) / (now - liveLastFpsTime)));
+            liveFrameCount = 0;
+            liveLastFpsTime = now;
+          }
+          const fpsBadge = document.getElementById('hud-fps-disp');
+          if (fpsBadge) {
+            fpsBadge.innerText = `⚡ ${liveFpsCurrent} FPS • ${frameMs}ms`;
+          }
+
           const statusLabel = document.getElementById('live-ai-status-label');
           if (activeLiveDetections.length > 0) {
             triggerHaptic();
