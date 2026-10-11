@@ -2774,34 +2774,39 @@
         ctx.beginPath(); ctx.moveTo(x1, y1 + h - blen); ctx.lineTo(x1, y1 + h); ctx.lineTo(x1 + blen, y1 + h); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1 + h); ctx.lineTo(x1 + w, y1 + h); ctx.lineTo(x1 + w, y1 + h - blen); ctx.stroke();
 
-        // Damage Name Label & Confidence Tag (Positioned above the box)
+        // Damage Name Label & Confidence Tag (Positioned above the box with high contrast)
         const rawName = (d.class || d.raw_cls || 'Hazard').toString().replace(/[-_]/g, ' ').trim();
         const className = rawName.charAt(0).toUpperCase() + rawName.slice(1);
         const confVal = Math.round((d.confidence || 0) * 100);
-        const tagText = `${className} ${confVal}%`;
+        const tagText = `${className.toUpperCase()} ${confVal}%`;
 
-        ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         const tMetrics = ctx.measureText(tagText);
-        const tagW = Math.max(tMetrics.width + 16, 72);
-        const tagH = 22;
+        const tagW = Math.max(tMetrics.width + 16, 76);
+        const tagH = 24;
 
-        // Position above box with smart clamp, fallback to top interior if near screen edge
+        // Position above box, fallback to inside top if near canvas upper edge
         const tagX = Math.max(2, Math.min(x1, canvas.width - tagW - 2));
-        const tagY = (y1 >= tagH + 4) ? (y1 - tagH - 3) : (y1 + 4);
+        const tagY = (y1 >= tagH + 2) ? (y1 - tagH - 1) : (y1 + 2);
 
-        // Solid background badge with slight shadow
+        // Solid background pill with crisp white text
         ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+        ctx.shadowBlur = 6;
         ctx.fillStyle = strokeColor;
         ctx.fillRect(tagX, tagY, tagW, tagH);
+
+        // White border for sharp definition
+        ctx.shadowColor = 'transparent';
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1.5;
         ctx.strokeRect(tagX, tagY, tagW, tagH);
 
-        // Crisp white text centered in badge
+        // Centered bold white typography
         ctx.fillStyle = '#ffffff';
         ctx.textBaseline = 'middle';
-        ctx.textAlign = 'left';
-        ctx.fillText(tagText, tagX + 8, tagY + (tagH / 2));
+        ctx.textAlign = 'center';
+        ctx.fillText(tagText, tagX + (tagW / 2), tagY + (tagH / 2));
         ctx.restore();
       });
     }
