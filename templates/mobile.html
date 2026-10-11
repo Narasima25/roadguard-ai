@@ -2602,15 +2602,15 @@
       const frameStart = performance.now();
       try {
         const offCanvas = document.createElement('canvas');
-        offCanvas.width = 384;
-        offCanvas.height = 384;
+        offCanvas.width = 256;
+        offCanvas.height = 256;
         const ctx = offCanvas.getContext('2d');
         ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        ctx.imageSmoothingQuality = 'medium';
 
         if (simulateLiveDefectActive && simDefectImg && simDefectImg.complete && simDefectImg.naturalWidth > 0) {
           // Live simulation mode: feeds sample road defect into radar loop
-          ctx.drawImage(simDefectImg, 0, 0, 384, 384);
+          ctx.drawImage(simDefectImg, 0, 0, 256, 256);
         } else if (hasVideo) {
           const vw = video.videoWidth;
           const vh = video.videoHeight;
@@ -2625,13 +2625,13 @@
           const cropX = Math.max(0, (vw - visibleW) / 2);
           const cropY = Math.max(0, (vh - visibleH) / 2);
 
-          ctx.drawImage(video, cropX, cropY, visibleW, visibleH, 0, 0, 384, 384);
+          ctx.drawImage(video, cropX, cropY, visibleW, visibleH, 0, 0, 256, 256);
         } else {
           liveAiBusy = false;
           return;
         }
 
-        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.82));
+        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.78));
         if (!blob || !liveAiActive) {
           liveAiBusy = false;
           return;
@@ -2641,7 +2641,7 @@
         fd.append('image', blob, 'frame.jpg');
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2200);
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
 
         const res = await fetch('/api/detect/live', {
           method: 'POST',
@@ -2660,7 +2660,7 @@
           // Temporal persistence smoothing: keeps bounding boxes stable without flickering
           if (freshDetections.length > 0) {
             persistentDetections = freshDetections;
-            persistExpiryTime = now + 750; // Hold defect box for 750ms
+            persistExpiryTime = now + 950; // Hold defect box for 950ms
           } else if (now > persistExpiryTime) {
             persistentDetections = [];
           }
@@ -2685,8 +2685,10 @@
           if (persistentDetections.length > 0) {
             triggerHaptic();
             const top = persistentDetections[0];
+            const topRaw = (top.class || top.raw_cls || 'Hazard').toString().replace(/[-_]/g, ' ').trim();
+            const topDisplay = topRaw.charAt(0).toUpperCase() + topRaw.slice(1);
             if (statusLabel) {
-              statusLabel.innerText = `⚠️ ${top.class.toUpperCase()} (${Math.round(top.confidence * 100)}%)`;
+              statusLabel.innerText = `⚠️ ${topDisplay.toUpperCase()} (${Math.round((top.confidence || 0) * 100)}%)`;
               statusLabel.style.color = '#ef4444';
             }
             if (targetBox) {
@@ -2703,7 +2705,9 @@
           }
         }
       } catch (e) {
-        // Ignored to allow seamless continuous frame loop
+        if (e && e.name !== 'AbortError') {
+          console.warn('Live AI radar loop error:', e);
+        }
       } finally {
         liveAiBusy = false;
       }
@@ -2744,7 +2748,7 @@
 
         let strokeColor = '#38bdf8';
         let fillColor = 'rgba(56, 189, 248, 0.18)';
-        const cLow = (d.raw_cls || '').toLowerCase();
+        const cLow = ((d.class || '') + ' ' + (d.raw_cls || '')).toLowerCase();
 
         if (cLow.includes('pothole') || cLow.includes('hole')) {
           strokeColor = '#ef4444'; // Red: Pothole
@@ -2753,8 +2757,8 @@
           strokeColor = '#f97316'; // Orange: Alligator structural fatigue
           fillColor = 'rgba(249, 115, 22, 0.22)';
         } else if (cLow.includes('transverse') || cLow.includes('longitudinal') || cLow.includes('crack')) {
-          strokeColor = '#eab308'; // Amber: Linear cracks
-          fillColor = 'rgba(234, 179, 8, 0.22)';
+          strokeColor = '#f59e0b'; // Amber: Linear cracks
+          fillColor = 'rgba(245, 158, 11, 0.22)';
         }
 
         ctx.fillStyle = fillColor;

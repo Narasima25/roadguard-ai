@@ -641,9 +641,9 @@ def detect_live_frame():
 
     raw_candidates = []
     if pothole_session is not None:
-        raw_candidates.extend(run_onnx_inference(pothole_session, img, 0.08, POTHOLE_NAMES, False))
+        raw_candidates.extend(run_onnx_inference(pothole_session, img, 0.06, POTHOLE_NAMES, False))
     if crack_session is not None:
-        raw_candidates.extend(run_onnx_inference(crack_session, img, 0.08, CRACK_NAMES, True))
+        raw_candidates.extend(run_onnx_inference(crack_session, img, 0.06, CRACK_NAMES, True))
 
     detections = apply_nms(raw_candidates, 0.40)
     del img
