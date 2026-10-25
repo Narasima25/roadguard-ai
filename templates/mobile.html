@@ -1282,9 +1282,9 @@
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#ffffff; border:1px solid var(--surface-border); border-radius:12px; padding:7px 14px; margin-top:8px; font-size:11.5px; font-weight:600; color:#475569; box-shadow:var(--shadow-sm);">
           <div style="display:flex; align-items:center; gap:6px; white-space:nowrap;">
             <span>🎚️ AI Sensitivity:</span>
-            <strong id="lbl-conf-val" style="color:var(--primary); font-family:'JetBrains Mono',monospace;">20%</strong>
+            <strong id="lbl-conf-val" style="color:var(--primary); font-family:'JetBrains Mono',monospace;">15%</strong>
           </div>
-          <input type="range" id="conf-slider" min="10" max="80" value="20" step="5" oninput="setConfidenceThreshold(this.value)" style="flex:1; max-width:180px; accent-color:#2563eb; cursor:pointer;" title="Adjust YOLO AI confidence threshold">
+          <input type="range" id="conf-slider" min="5" max="80" value="15" step="5" oninput="setConfidenceThreshold(this.value)" style="flex:1; max-width:180px; accent-color:#2563eb; cursor:pointer;" title="Adjust YOLO AI confidence threshold">
         </div>
       </div>
 
@@ -2602,8 +2602,8 @@
       if (!liveAiActive) return;
       await runLiveAiFrame();
       if (liveAiActive) {
-        // BUG FIX: was 60ms (fires before server responds) — now 800ms to prevent request flooding
-        liveAiTimeout = setTimeout(triggerLiveAiCycle, 800);
+        // High-responsiveness live radar cycle (240ms cadence = ~4 FPS)
+        liveAiTimeout = setTimeout(triggerLiveAiCycle, 240);
       }
     }
 
@@ -2617,15 +2617,15 @@
     simDefectImg.src = '/uploads/pothole_demo.jpg';
     let simToggleIndex = 0;
 
-    // AI Confidence Threshold & Torch State
-    let currentConfidenceThreshold = 0.20;
+    // AI Confidence Threshold & Torch State (Default 15% for responsive live camera detection)
+    let currentConfidenceThreshold = 0.15;
     let torchActive = false;
 
     function setConfidenceThreshold(val) {
       currentConfidenceThreshold = parseFloat(val) / 100;
       const lbl = document.getElementById('lbl-conf-val');
       if (lbl) lbl.innerText = val + '%';
-      showToast(`🎯 AI Confidence set to ${val}%`);
+      showToast(`🎯 AI Sensitivity set to ${val}%`);
     }
 
     async function toggleCameraTorch() {
@@ -2662,21 +2662,17 @@
       const simBtn = document.getElementById('chip-sim-live-btn');
       const simFeedImg = document.getElementById('sim-feed-img');
       const splash = document.getElementById('viewfinder-splash');
-
       const video = document.getElementById('camera-video');
 
       if (simulateLiveDefectActive) {
         if (!simDefectImg) {
           simDefectImg = new Image();
-          simDefectImg.onerror = () => {
-            simDefectImg.src = '/uploads/demo.jpg';
-          };
-          simDefectImg.src = '/uploads/pothole_demo.jpg';
         }
+        simDefectImg.onerror = () => { simDefectImg.src = '/uploads/demo.jpg'; };
+        simDefectImg.src = '/uploads/pothole_demo.jpg';
+
         if (simFeedImg) {
-          simFeedImg.onerror = () => {
-            simFeedImg.src = '/uploads/demo.jpg';
-          };
+          simFeedImg.onerror = () => { simFeedImg.src = '/uploads/demo.jpg'; };
           simFeedImg.src = '/uploads/pothole_demo.jpg';
           simFeedImg.style.display = 'block';
         }
@@ -2708,6 +2704,9 @@
           simBtn.style.color = '#7c3aed';
           simBtn.style.borderColor = '#8b5cf6';
         }
+        persistentDetections = [];
+        activeLiveDetections = [];
+        clearLiveHudCanvas();
         showToast('Live defect simulation stopped');
       }
     }
@@ -2715,6 +2714,7 @@
     async function runLiveAiFrame() {
       if (!liveAiActive || liveAiBusy) return;
       const video = document.getElementById('camera-video');
+      const simFeedImg = document.getElementById('sim-feed-img');
       const hasVideo = video && video.readyState >= 2 && !video.paused && !video.ended && (video.videoWidth || 0) > 0;
 
       if (!hasVideo && !simulateLiveDefectActive) return;
@@ -2727,10 +2727,16 @@
         offCanvas.height = 256;
         const ctx = offCanvas.getContext('2d');
 
-        if (simulateLiveDefectActive && simDefectImg && simDefectImg.complete && simDefectImg.naturalWidth > 0) {
-          ctx.drawImage(simDefectImg, 0, 0, 256, 256);
+        if (simulateLiveDefectActive) {
+          const srcImg = (simFeedImg && simFeedImg.complete && simFeedImg.naturalWidth > 0) ? simFeedImg : simDefectImg;
+          if (srcImg && srcImg.naturalWidth > 0) {
+            ctx.drawImage(srcImg, 0, 0, 256, 256);
+          } else {
+            liveAiBusy = false;
+            return;
+          }
         } else if (hasVideo) {
-          // Precise visible viewport crop matching 7fbe0f7
+          // Precise visible viewport crop matching camera aspect ratio
           const vw = video.videoWidth || 1280;
           const vh = video.videoHeight || 720;
           const rect = video.getBoundingClientRect();
@@ -2748,7 +2754,8 @@
           return;
         }
 
-        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.55));
+        // Quality 0.85 retains high-frequency edge gradients essential for YOLO detection
+        const blob = await new Promise(res => offCanvas.toBlob(res, 'image/jpeg', 0.85));
         if (!blob || !liveAiActive) {
           liveAiBusy = false;
           return;
@@ -2759,7 +2766,7 @@
         fd.append('confidence', currentConfidenceThreshold);
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2800);
+        const timeoutId = setTimeout(() => controller.abort(), 2400);
 
         const res = await fetch('/api/detect/live', {
           method: 'POST',
@@ -2772,14 +2779,27 @@
         const data = await res.json();
 
         if (data && data.success && liveAiActive) {
-          activeLiveDetections = data.detections || [];
+          const serverDets = data.detections || [];
+          const now = performance.now();
+
+          // Persistence Buffer: prevents strobe flicker during camera motion jitter
+          if (serverDets.length > 0) {
+            persistentDetections = serverDets;
+            persistExpiryTime = now + 1200; // Keep bounding boxes rendered for 1.2s
+            activeLiveDetections = serverDets;
+          } else if (now < persistExpiryTime && persistentDetections.length > 0) {
+            activeLiveDetections = persistentDetections;
+          } else {
+            activeLiveDetections = [];
+            persistentDetections = [];
+          }
+
           drawLiveHudOverlay(activeLiveDetections);
 
           // Live performance telemetry
-          const now = performance.now();
           const frameMs = Math.round(now - frameStart);
           liveFrameCount++;
-          if (now - liveLastFpsTime >= 850) {
+          if (now - liveLastFpsTime >= 750) {
             liveFpsCurrent = Math.max(1, Math.round((liveFrameCount * 1000) / (now - liveLastFpsTime)));
             liveFrameCount = 0;
             liveLastFpsTime = now;
@@ -2790,7 +2810,9 @@
           }
 
           const statusLabel = document.getElementById('live-ai-status-label');
+          const telemBadge = document.getElementById('hud-camera-telemetry');
           const targetBox = document.querySelector('.hud-target-box');
+
           if (activeLiveDetections.length > 0) {
             triggerHaptic();
             const top = activeLiveDetections[0];
@@ -2800,6 +2822,10 @@
               statusLabel.innerText = `⚠️ ${topDisplay.toUpperCase()} (${Math.round((top.confidence || 0) * 100)}%)`;
               statusLabel.style.color = '#ef4444';
             }
+            if (telemBadge) {
+              telemBadge.innerText = `⚠️ ${activeLiveDetections.length} HAZARD${activeLiveDetections.length > 1 ? 'S' : ''} DETECTED`;
+              telemBadge.style.color = '#ef4444';
+            }
             if (targetBox) {
               targetBox.classList.add('alert-hazard');
             }
@@ -2807,6 +2833,10 @@
             if (statusLabel) {
               statusLabel.innerText = '⚡ LIVE RADAR: SCANNING (ROAD CLEAR)';
               statusLabel.style.color = '#38bdf8';
+            }
+            if (telemBadge) {
+              telemBadge.innerText = '📹 RADAR ACTIVE (CLEAR)';
+              telemBadge.style.color = '#38bdf8';
             }
             if (targetBox) {
               targetBox.classList.remove('alert-hazard');
@@ -2831,13 +2861,20 @@
 
     function drawLiveHudOverlay(detections) {
       const canvas = document.getElementById('live-hud-canvas');
+      if (!canvas) return;
       const video = document.getElementById('camera-video');
-      if (!canvas || !video) return;
+      const box = document.getElementById('viewfinder-box');
+      const target = (video && video.style.display !== 'none' && video.getBoundingClientRect().width > 0) ? video : box;
+      if (!target) return;
 
-      const rect = video.getBoundingClientRect();
-      if (Math.abs(canvas.width - rect.width) > 1 || Math.abs(canvas.height - rect.height) > 1) {
-        canvas.width = rect.width;
-        canvas.height = rect.height;
+      const rect = target.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        if (Math.abs(canvas.width - rect.width) > 1 || Math.abs(canvas.height - rect.height) > 1) {
+          canvas.width = rect.width;
+          canvas.height = rect.height;
+        }
+      } else {
+        return;
       }
 
       const ctx = canvas.getContext('2d');

@@ -324,11 +324,17 @@ def run_onnx_inference(session, img_bgr, conf_thresh, class_map, is_crack=False)
         raw_name = class_map.get(cid, f"class_{cid}")
         if "background" in raw_name.lower():
             continue
+        display_name = raw_name.replace("-", " ").replace("_", " ").strip().title()
+        if "pothole" in raw_name.lower() or "hole" in raw_name.lower():
+            display_name = "Pothole"
+        elif "crack" in raw_name.lower():
+            display_name = "Crack"
         x1 = max(0.0, min(1.0, float((cx - w / 2) / 256.0)))
         y1 = max(0.0, min(1.0, float((cy - h / 2) / 256.0)))
         x2 = max(0.0, min(1.0, float((cx + w / 2) / 256.0)))
         y2 = max(0.0, min(1.0, float((cy + h / 2) / 256.0)))
         results.append({
+            "class": display_name,
             "raw_cls": raw_name,
             "confidence": round(float(conf), 3),
             "box": [round(x1, 4), round(y1, 4), round(x2, 4), round(y2, 4)]
@@ -746,8 +752,8 @@ def detect_live_frame():
     if pothole_session is None and crack_session is None:
         load_ai_model()
 
-    conf_val = float(request.form.get("confidence", 0.18))
-    conf_val = max(0.05, min(0.95, conf_val))
+    conf_val = float(request.form.get("confidence", 0.14))
+    conf_val = max(0.04, min(0.95, conf_val))
 
     raw_candidates = []
     if pothole_session is not None:
