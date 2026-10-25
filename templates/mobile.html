@@ -375,7 +375,7 @@
       width: 100%;
       height: 100%;
       pointer-events: none;
-      z-index: 5;
+      z-index: 10;
     }
 
     /* High-Tech HUD Reticle Overlay */
@@ -2936,7 +2936,7 @@
         ctx.lineWidth = 4;
         ctx.strokeStyle = '#ffffff';
         ctx.beginPath(); ctx.moveTo(x1, y1 + blen); ctx.lineTo(x1, y1); ctx.lineTo(x1 + blen, y1); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1); ctx.lineTo(x1 + w); ctx.lineTo(x1 + w, y1 + blen); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1); ctx.lineTo(x1 + w, y1); ctx.lineTo(x1 + w, y1 + blen); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(x1, y1 + h - blen); ctx.lineTo(x1, y1 + h); ctx.lineTo(x1 + blen, y1 + h); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(x1 + w - blen, y1 + h); ctx.lineTo(x1 + w, y1 + h); ctx.lineTo(x1 + w, y1 + h - blen); ctx.stroke();
 
@@ -2951,9 +2951,15 @@
         const tagW = Math.max(tMetrics.width + 16, 88);
         const tagH = 24;
 
-        // Position above box, fallback to inside top if near canvas upper edge
-        const tagX = Math.max(4, Math.min(x1, canvas.width - tagW - 4));
-        const tagY = (y1 >= tagH + 4) ? (y1 - tagH - 4) : (y1 + 4);
+        // Position above box, or inside top if near canvas upper edge (avoid top HUD meta bar)
+        const tagX = Math.max(6, Math.min(x1, canvas.width - tagW - 6));
+        let tagY = y1 - tagH - 6;
+        if (tagY < 46) {
+          tagY = Math.max(46, y1 + 8);
+        }
+        if (tagY + tagH > canvas.height - 35) {
+          tagY = canvas.height - tagH - 38;
+        }
 
         // Solid background pill with crisp white text
         ctx.save();
