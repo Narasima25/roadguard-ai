@@ -485,6 +485,17 @@ def officer_required(f):
 # =========================================================
 # Portal Routes
 # =========================================================
+@app.route("/api/health", methods=["GET"])
+def health_check():
+    """Lightweight health check for Render / cloud load-balancers"""
+    models_ready = (pothole_session is not None) or (crack_session is not None)
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "models_loaded": models_ready,
+        "service": "RoadGuard AI"
+    }), 200
+
 @app.route("/login", methods=["GET", "POST"])
 def login_view():
     """Login page for Officers, Administrators, and Citizens"""

@@ -3,14 +3,21 @@ services:
     name: roadguard-ai
     env: python
     buildCommand: pip install --no-cache-dir -r requirements.txt
-    startCommand: python server/app.py
+    startCommand: gunicorn --workers 2 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT server.app:app
+    healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
         value: 3.10.12
+      - key: FLASK_SECRET_KEY
+        generateValue: true
       - key: OMP_NUM_THREADS
         value: 1
       - key: MKL_NUM_THREADS
+        value: 1
+      - key: OPENBLAS_NUM_THREADS
+        value: 1
+      - key: NUMEXPR_NUM_THREADS
         value: 1
       - key: FLASK_DEBUG
         value: 0
