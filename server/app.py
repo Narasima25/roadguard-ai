@@ -362,7 +362,7 @@ def apply_nms(candidates, iou_thresh=0.45):
                 break
         if not overlap:
             raw_cls = cand["raw_cls"]
-            cls_name = raw_cls.replace("_", " ").replace("-", " ").strip().title()
+            cls_name = cand.get("class") or raw_cls.replace("_", " ").replace("-", " ").strip().title()
             kept.append({
                 "class": cls_name,
                 "confidence": cand["confidence"],
@@ -752,8 +752,10 @@ def detect_live_frame():
     if pothole_session is None and crack_session is None:
         load_ai_model()
 
-    conf_val = float(request.form.get("confidence", 0.14))
-    conf_val = max(0.04, min(0.95, conf_val))
+    conf_val = float(request.form.get("confidence", 0.08))
+    # Mobile live camera frames need high responsiveness:
+    # Cap threshold between 0.03 and 0.22 so accidental high threshold never blinds live scanning
+    conf_val = max(0.03, min(0.22, conf_val))
 
     raw_candidates = []
     if pothole_session is not None:
