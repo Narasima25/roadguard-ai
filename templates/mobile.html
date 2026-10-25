@@ -88,6 +88,7 @@
       justify-content: space-between;
       align-items: center;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+      gap: 8px;
     }
 
     .brand-wrap {
@@ -1103,17 +1104,46 @@
   <!-- App Header -->
   <header class="app-header">
     <div class="brand-wrap">
-      <div class="brand-logo-icon">🛡️</div>
+      <div class="brand-logo-icon">🛣️</div>
       <div class="brand-text">
         <h1>RoadGuard</h1>
-        <p>Mobile AI Road Inspector</p>
+        <p>👥 People Portal &nbsp;·&nbsp; {{ current_user or 'Public Reporter' }}</p>
       </div>
     </div>
-    <div class="header-status-pill searching" id="header-gps-pill" onclick="openGpsInfoModal()" title="Tap for GPS Diagnostics">
-      <span class="pulse-dot"></span>
-      <span id="gps-pill-text">ACQUIRING GPS...</span>
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+      <!-- Portal button redirecting to Officer Page -->
+      <a href="/" class="btn-officer-portal" title="Switch to Officer Portal" style="display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:8px;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#ffffff;font-size:11px;font-weight:700;text-decoration:none;box-shadow:0 2px 8px rgba(37,99,235,0.35);letter-spacing:0.2px;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+        <span>🛡️ Officer Portal</span>
+        <span style="font-size:10px;">→</span>
+      </a>
+      <div class="header-status-pill searching" id="header-gps-pill" onclick="openGpsInfoModal()" title="Tap for GPS Diagnostics">
+        <span class="pulse-dot"></span>
+        <span id="gps-pill-text">ACQUIRING GPS...</span>
+      </div>
+      <a href="/logout" title="Logout" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;color:#ea580c;font-size:14px;text-decoration:none;transition:all 0.2s;flex-shrink:0;" onmouseover="this.style.background='#fef3c7'" onmouseout="this.style.background='#fff7ed'">🚪</a>
     </div>
   </header>
+
+  <!-- Municipal Officer Quick Portal Switch Banner -->
+  <div style="background:#eff6ff;border-bottom:1px solid #bfdbfe;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#1e40af;">
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span>🛡️</span>
+      <span>Municipal Officer or Administrator?</span>
+    </div>
+    <a href="/" style="color:#1d4ed8;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:rgba(37,99,235,0.1);border-radius:6px;">
+      <span>Go to Officer Portal</span>
+      <span>→</span>
+    </a>
+  </div>
+
+  <!-- Insecure HTTP Remote Warning Banner -->
+  <div id="https-warning-banner" style="display:none;background:#fef2f2;border-bottom:1px solid #fecaca;padding:8px 16px;justify-content:space-between;align-items:center;font-size:11.5px;color:#991b1b;">
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span>🔒</span>
+      <span>Live camera requires HTTPS on phones. If accessing via LAN IP, run server with <code>--https</code>.</span>
+    </div>
+    <button onclick="document.getElementById('https-warning-banner').style.display='none'" style="background:none;border:none;color:#991b1b;cursor:pointer;font-size:14px;padding:2px 6px;">✕</button>
+  </div>
 
   <!-- Live Telemetry Strip -->
   <section class="telemetry-strip" onclick="switchTab('map')" title="Tap to view on GIS map">
@@ -1219,6 +1249,9 @@
           <button class="chip-btn" id="chip-live-ai-btn" onclick="toggleLiveAiScan()" style="border-color: #10b981; color: #059669; font-weight: 700;">
             ⚡ Live AI Scan: OFF
           </button>
+          <button class="chip-btn" id="chip-torch-btn" onclick="toggleCameraTorch()" style="border-color: #f59e0b; color: #d97706; font-weight: 700;">
+            🔦 Torch: OFF
+          </button>
           <button class="chip-btn" id="chip-sim-live-btn" onclick="toggleSimulateLiveDefect()" style="border-color: #8b5cf6; color: #7c3aed; font-weight: 700;">
             🧪 Live Sim: OFF
           </button>
@@ -1243,7 +1276,15 @@
           <button class="chip-btn" onclick="jumpLocation('MUMBAI')">Mumbai</button>
           <button class="chip-btn" onclick="jumpLocation('HYDERABAD')">Hyderabad</button>
           <button class="chip-btn" onclick="jumpLocation('CHENNAI')">Chennai</button>
-          <button class="chip-btn" onclick="jumpLocation('PUNE')">Pune</button>
+        </div>
+
+        <!-- AI Confidence Sensitivity Slider Deck -->
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#ffffff; border:1px solid var(--surface-border); border-radius:12px; padding:7px 14px; margin-top:8px; font-size:11.5px; font-weight:600; color:#475569; box-shadow:var(--shadow-sm);">
+          <div style="display:flex; align-items:center; gap:6px; white-space:nowrap;">
+            <span>🎚️ AI Sensitivity:</span>
+            <strong id="lbl-conf-val" style="color:var(--primary); font-family:'JetBrains Mono',monospace;">20%</strong>
+          </div>
+          <input type="range" id="conf-slider" min="10" max="80" value="20" step="5" oninput="setConfidenceThreshold(this.value)" style="flex:1; max-width:180px; accent-color:#2563eb; cursor:pointer;" title="Adjust YOLO AI confidence threshold">
         </div>
       </div>
 
@@ -1388,10 +1429,6 @@
       <span class="nav-tab-icon">📋</span>
       <span>Reports</span>
     </div>
-    <a href="/" class="nav-tab" style="text-decoration:none; color:inherit;">
-      <span class="nav-tab-icon">🖥️</span>
-      <span>Portal</span>
-    </a>
   </nav>
 
   <!-- Manual Coordinates Modal -->
@@ -1608,8 +1645,11 @@
     function syncLiveHudCanvasSize() {
       const canvas = document.getElementById('live-hud-canvas');
       const video = document.getElementById('camera-video');
-      if (!canvas || !video) return;
-      const rect = video.getBoundingClientRect();
+      const box = document.getElementById('viewfinder-box');
+      if (!canvas) return;
+      const target = (video && video.style.display !== 'none' && video.getBoundingClientRect().width > 0) ? video : box;
+      if (!target) return;
+      const rect = target.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
         if (canvas.width !== rect.width || canvas.height !== rect.height) {
           canvas.width = rect.width;
@@ -2058,7 +2098,7 @@
       const lat = parseFloat(document.getElementById('manual-lat-input').value);
       const lon = parseFloat(document.getElementById('manual-lon-input').value);
       if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-        alert('Please enter valid coordinates (-90 to 90 lat, -180 to 180 lon)');
+        showToast('⚠️ Invalid coordinates — lat must be -90 to 90, lon -180 to 180');
         return;
       }
       triggerHaptic();
@@ -2235,6 +2275,7 @@
       formData.append('accuracy', currentAccuracy);
       formData.append('address', currentAddress);
       formData.append('source', locationSource);
+      formData.append('confidence', currentConfidenceThreshold);
 
       try {
         const res = await fetch('/api/detect', { method: 'POST', body: formData });
@@ -2339,11 +2380,13 @@
       }
     }
 
-    function filterFeed(filter) {
+    function filterFeed(filter, btn) {
       triggerHaptic();
       currentFilter = filter;
       document.querySelectorAll('#tab-feed .chip-btn').forEach(b => b.classList.remove('active'));
-      event.target.classList.add('active');
+      // Support both direct call with btn element and legacy event.target
+      const activeBtn = btn || (window.event && window.event.target);
+      if (activeBtn) activeBtn.classList.add('active');
       fetchRecentIncidents();
     }
 
@@ -2381,6 +2424,11 @@
         return;
       }
 
+      // HTTPS check: camera requires HTTPS (except localhost)
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        showToast('⚠️ Camera requires HTTPS. Use https:// or connect via localhost.');
+      }
+
       try {
         showToast('📹 Opening camera feed...');
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -2390,6 +2438,11 @@
           audio: false
         });
 
+        // Stop any previous stream tracks before assigning new stream
+        if (video.srcObject) {
+          video.srcObject.getTracks().forEach(t => t.stop());
+        }
+
         video.srcObject = stream;
         video.setAttribute('playsinline', '');
         video.setAttribute('autoplay', '');
@@ -2397,10 +2450,17 @@
         video.style.display = 'block';
         if (splash) splash.style.display = 'none';
 
-        video.onloadedmetadata = () => {
+        const initVideoDimensions = () => {
           detectStreamDimensions(video);
           syncLiveHudCanvasSize();
+          setCameraAspectRatio(selectedAspectRatio);
         };
+
+        if (video.readyState >= 1) {
+          initVideoDimensions();
+        } else {
+          video.onloadedmetadata = initVideoDimensions;
+        }
 
         try {
           await video.play();
@@ -2408,13 +2468,18 @@
           console.warn('Video play triggered:', playErr);
         }
 
-        detectStreamDimensions(video);
-        setCameraAspectRatio(selectedAspectRatio);
+        initVideoDimensions();
         startLiveAiScan();
         showToast('⚡ Live AI Camera Radar Active!');
       } catch (err) {
         console.error('Camera stream access failed:', err);
-        showToast('⚠️ Camera access unavailable. Opening photo picker...');
+        if (err.name === 'NotAllowedError') {
+          showToast('⚠️ Camera permission denied. Please allow camera access.');
+        } else if (err.name === 'NotFoundError') {
+          showToast('⚠️ No camera found on device. Opening photo picker...');
+        } else {
+          showToast('⚠️ Camera unavailable. Opening photo picker...');
+        }
         triggerCameraCapture();
       }
     }
@@ -2508,6 +2573,16 @@
       activeLiveDetections = [];
       clearLiveHudCanvas();
 
+      // BUG FIX: Stop MediaStream tracks so camera LED turns off
+      const video = document.getElementById('camera-video');
+      if (video && video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+        video.srcObject = null;
+        video.style.display = 'none';
+        const splash = document.getElementById('viewfinder-splash');
+        if (splash) splash.style.display = 'flex';
+      }
+
       const chipBtn = document.getElementById('chip-live-ai-btn');
       if (chipBtn) {
         chipBtn.classList.remove('active');
@@ -2527,7 +2602,8 @@
       if (!liveAiActive) return;
       await runLiveAiFrame();
       if (liveAiActive) {
-        liveAiTimeout = setTimeout(triggerLiveAiCycle, 60);
+        // BUG FIX: was 60ms (fires before server responds) — now 800ms to prevent request flooding
+        liveAiTimeout = setTimeout(triggerLiveAiCycle, 800);
       }
     }
 
@@ -2541,6 +2617,45 @@
     simDefectImg.src = '/uploads/pothole_demo.jpg';
     let simToggleIndex = 0;
 
+    // AI Confidence Threshold & Torch State
+    let currentConfidenceThreshold = 0.20;
+    let torchActive = false;
+
+    function setConfidenceThreshold(val) {
+      currentConfidenceThreshold = parseFloat(val) / 100;
+      const lbl = document.getElementById('lbl-conf-val');
+      if (lbl) lbl.innerText = val + '%';
+      showToast(`🎯 AI Confidence set to ${val}%`);
+    }
+
+    async function toggleCameraTorch() {
+      triggerHaptic();
+      const video = document.getElementById('camera-video');
+      if (!video || !video.srcObject) {
+        showToast('Start camera feed first to activate torch');
+        return;
+      }
+      const track = video.srcObject.getVideoTracks()[0];
+      if (!track) return;
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+      if (!capabilities.torch) {
+        showToast('🔦 Flashlight not supported on this camera/browser');
+        return;
+      }
+      try {
+        torchActive = !torchActive;
+        await track.applyConstraints({ advanced: [{ torch: torchActive }] });
+        const btn = document.getElementById('chip-torch-btn');
+        if (btn) {
+          btn.innerText = torchActive ? '🔦 Torch: ON' : '🔦 Torch: OFF';
+          btn.classList.toggle('active', torchActive);
+        }
+        showToast(torchActive ? '🔦 Flashlight turned ON' : '🔦 Flashlight turned OFF');
+      } catch (err) {
+        showToast('Could not toggle flashlight');
+      }
+    }
+
     function toggleSimulateLiveDefect() {
       triggerHaptic();
       simulateLiveDefectActive = !simulateLiveDefectActive;
@@ -2553,9 +2668,15 @@
       if (simulateLiveDefectActive) {
         if (!simDefectImg) {
           simDefectImg = new Image();
+          simDefectImg.onerror = () => {
+            simDefectImg.src = '/uploads/demo.jpg';
+          };
           simDefectImg.src = '/uploads/pothole_demo.jpg';
         }
         if (simFeedImg) {
+          simFeedImg.onerror = () => {
+            simFeedImg.src = '/uploads/demo.jpg';
+          };
           simFeedImg.src = '/uploads/pothole_demo.jpg';
           simFeedImg.style.display = 'block';
         }
@@ -2635,6 +2756,7 @@
 
         const fd = new FormData();
         fd.append('image', blob, 'frame.jpg');
+        fd.append('confidence', currentConfidenceThreshold);
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2800);
@@ -2804,6 +2926,9 @@
       showToast(`🧪 Loading ${isPothole ? 'Pothole' : 'Crack'} test frame...`);
       try {
         const res = await fetch(sampleUrl);
+        if (!res.ok) {
+          throw new Error(`Sample file not available (${res.status})`);
+        }
         const blob = await res.blob();
         selectedFile = new File([blob], sampleName, { type: 'image/jpeg' });
         const previewUrl = URL.createObjectURL(selectedFile);
@@ -2813,7 +2938,7 @@
         document.getElementById('preview-card').scrollIntoView({ behavior: 'smooth' });
         uploadAndRunInference();
       } catch (err) {
-        showToast('⚠️ Could not load test sample');
+        showToast('⚠️ Test sample file not found in uploads');
       }
     }
 
@@ -2822,11 +2947,23 @@
       syncLiveHudCanvasSize();
     });
 
+    // ResizeObserver for dynamic canvas sync on orientation and viewport changes
+    if (window.ResizeObserver) {
+      const vBox = document.getElementById('viewfinder-box');
+      if (vBox) {
+        new ResizeObserver(() => syncLiveHudCanvasSize()).observe(vBox);
+      }
+    }
+
     // Page Load Initializer
     window.onload = () => {
       setupMapSearch();
       acquireLocation(false);
       setCameraAspectRatio(selectedAspectRatio);
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        const banner = document.getElementById('https-warning-banner');
+        if (banner) banner.style.display = 'flex';
+      }
     };
   </script>
 </body>

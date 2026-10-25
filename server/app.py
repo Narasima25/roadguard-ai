@@ -9,9 +9,12 @@ import gc
 import io
 import sqlite3
 import uuid
+import hashlib
+import secrets
 from datetime import datetime, timezone, timedelta
+from functools import wraps
 from pathlib import Path
-from flask import Flask, request, jsonify, render_template, send_from_directory, make_response
+from flask import Flask, request, jsonify, render_template, send_from_directory, make_response, session, redirect, url_for
 from flask_cors import CORS
 import cv2  # type: ignore
 import numpy as np  # type: ignore
@@ -22,9 +25,6 @@ try:
 except Exception:
     ort = None
 import requests
-
-# Google Maps API Key configuration
-GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
 
 # In-memory Geo Caches to prevent rate limiting
 _REVERSE_GEO_CACHE = {}
@@ -156,6 +156,9 @@ if env_file.exists():
     except Exception as e:
         print(f"Note: .env reading exception: {e}")
 
+# Google Maps API Key (loaded after .env is parsed)
+GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+
 MODELS_DIR = BASE_DIR / "models"
 UPLOADS_DIR = BASE_DIR / "server" / "uploads"
 DB_PATH = BASE_DIR / "server" / "road_damage.db"
@@ -166,15 +169,37 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 
+# =========================================================
+# Auth Configuration
+# =========================================================
+# Default credentials (override via env vars for production)
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+OFFICER_USERNAME = os.environ.get("OFFICER_USERNAME", "officer")
+OFFICER_PASSWORD = os.environ.get("OFFICER_PASSWORD", "officer123")
+CITIZEN_USERNAME = os.environ.get("CITIZEN_USERNAME", "citizen")
+CITIZEN_PASSWORD = os.environ.get("CITIZEN_PASSWORD", "citizen123")
+
+USERS = {
+    ADMIN_USERNAME: {"password": ADMIN_PASSWORD, "role": "admin", "name": "System Administrator"},
+    OFFICER_USERNAME: {"password": OFFICER_PASSWORD, "role": "officer", "name": "Road Officer"},
+    CITIZEN_USERNAME: {"password": CITIZEN_PASSWORD, "role": "citizen", "name": "Public Citizen"},
+    "public": {"password": "public123", "role": "citizen", "name": "Public Citizen"},
+}
+
 app = Flask(__name__, template_folder=str(TEMPLATES_DIR), static_folder=str(STATIC_DIR))
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 CORS(app)
 
 # Database Setup
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    # Enable WAL mode for concurrent read/write safety (fixes locked DB under live scan)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 def init_db():
@@ -200,11 +225,19 @@ def init_db():
             accuracy REAL DEFAULT 0.0
         )
     """)
+    # Add columns if missing (migration)
     for col, col_type in [("address", "TEXT DEFAULT ''"), ("accuracy", "REAL DEFAULT 0.0")]:
         try:
             cursor.execute(f"ALTER TABLE damage_reports ADD COLUMN {col} {col_type}")
         except Exception:
             pass
+    # Add indexes for faster filtering
+    try:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_priority ON damage_reports(priority)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON damage_reports(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON damage_reports(timestamp DESC)")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -413,25 +446,89 @@ def compute_priority_and_severity(detections, img_width, img_height):
 
     return priority, score, dominant_class
 
-# Google Maps API Key configuration
-GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+# =========================================================
+# Auth Decorators
+# =========================================================
+def login_required(f):
+    """Redirect to login if not authenticated"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("user"):
+            return redirect(url_for("login_view"))
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    """Require admin role; redirect to login otherwise"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("user") or session.get("role") != "admin":
+            return redirect(url_for("login_view"))
+        return f(*args, **kwargs)
+    return decorated
+
+def officer_required(f):
+    """Require officer or admin role"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("user") or session.get("role") not in ("admin", "officer"):
+            return redirect(url_for("login_view"))
+        return f(*args, **kwargs)
+    return decorated
+
+# =========================================================
+# Portal Routes
+# =========================================================
+@app.route("/login", methods=["GET", "POST"])
+def login_view():
+    """Login page for Officers, Administrators, and Citizens"""
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
+        user = USERS.get(username)
+        if user and user["password"] == password:
+            session["user"] = username
+            session["role"] = user["role"]
+            session.permanent = True
+            # Road Officers & Admins go to Officer Dashboard (/)
+            # Public Citizens go to People Portal (/mobile)
+            if user["role"] in ("admin", "officer"):
+                return redirect(url_for("dashboard_view"))
+            else:
+                return redirect(url_for("mobile_view"))
+        error = "Invalid username or password"
+    return render_template("login.html", error=error)
+
+@app.route("/logout")
+def logout_view():
+    """Clear session and redirect to login"""
+    session.clear()
+    return redirect(url_for("login_view"))
 
 # Routes
 @app.route("/")
+@officer_required
 def dashboard_view():
-    """Serves the Officer Portal Dashboard"""
+    """Serves the Officer Portal Dashboard (Officer & Admin access)"""
     return render_template(
         "dashboard.html",
         model_source=model_source,
-        google_maps_api_key=GOOGLE_MAPS_API_KEY
+        google_maps_api_key=GOOGLE_MAPS_API_KEY,
+        current_user=session.get("user"),
+        current_role=session.get("role")
     )
 
 @app.route("/mobile")
 def mobile_view():
-    """Serves the Mobile Camera & GPS capture interface"""
+    """Serves the People / Public Portal for road defect reporting and scanning"""
+    user = session.get("user") or "Public Reporter"
+    role = session.get("role") or "citizen"
     resp = make_response(render_template(
         "mobile.html",
-        google_maps_api_key=GOOGLE_MAPS_API_KEY
+        google_maps_api_key=GOOGLE_MAPS_API_KEY,
+        current_user=user,
+        current_role=role
     ))
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
@@ -440,6 +537,11 @@ def mobile_view():
 
 @app.route("/uploads/<path:filename>")
 def serve_upload(filename):
+    target = UPLOADS_DIR / filename
+    if not target.exists():
+        demo_file = UPLOADS_DIR / "demo.jpg"
+        if demo_file.exists():
+            return send_from_directory(str(UPLOADS_DIR), "demo.jpg")
     return send_from_directory(str(UPLOADS_DIR), filename)
 
 @app.after_request
@@ -518,11 +620,14 @@ def detect_damage():
     if pothole_session is None and crack_session is None:
         load_ai_model()
 
+    conf_val = float(request.form.get("confidence", 0.18))
+    conf_val = max(0.05, min(0.95, conf_val))
+
     raw_candidates = []
     if pothole_session is not None:
-        raw_candidates.extend(run_onnx_inference(pothole_session, img, 0.18, POTHOLE_NAMES, False))
+        raw_candidates.extend(run_onnx_inference(pothole_session, img, conf_val, POTHOLE_NAMES, False))
     if crack_session is not None:
-        raw_candidates.extend(run_onnx_inference(crack_session, img, 0.18, CRACK_NAMES, True))
+        raw_candidates.extend(run_onnx_inference(crack_session, img, conf_val, CRACK_NAMES, True))
 
     detections = apply_nms(raw_candidates, 0.45)
 
@@ -624,11 +729,13 @@ def detect_live_frame():
         return jsonify({"success": False, "detections": []}), 400
 
     image_file = request.files["image"]
-    file_bytes = np.frombuffer(image_file.read(), np.uint8)
+    # BUG FIX: read raw bytes first, then decode — was passing numpy array to BytesIO
+    raw_bytes = image_file.read()
+    file_bytes = np.frombuffer(raw_bytes, np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     if img is None:
         try:
-            pil_img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
+            pil_img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
             img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         except Exception:
             return jsonify({"success": False, "detections": []}), 400
@@ -639,11 +746,14 @@ def detect_live_frame():
     if pothole_session is None and crack_session is None:
         load_ai_model()
 
+    conf_val = float(request.form.get("confidence", 0.18))
+    conf_val = max(0.05, min(0.95, conf_val))
+
     raw_candidates = []
     if pothole_session is not None:
-        raw_candidates.extend(run_onnx_inference(pothole_session, img, 0.18, POTHOLE_NAMES, False))
+        raw_candidates.extend(run_onnx_inference(pothole_session, img, conf_val, POTHOLE_NAMES, False))
     if crack_session is not None:
-        raw_candidates.extend(run_onnx_inference(crack_session, img, 0.18, CRACK_NAMES, True))
+        raw_candidates.extend(run_onnx_inference(crack_session, img, conf_val, CRACK_NAMES, True))
 
     detections = apply_nms(raw_candidates, 0.45)
     del img
@@ -796,6 +906,12 @@ def get_reports():
     else:
         query += " ORDER BY timestamp DESC"
 
+    limit = request.args.get("limit", default=None, type=int)
+    offset = request.args.get("offset", default=0, type=int)
+    if limit is not None and limit > 0:
+        query += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
     conn = get_db()
     rows = conn.execute(query, params).fetchall()
     conn.close()
@@ -804,8 +920,9 @@ def get_reports():
     return jsonify(reports)
 
 @app.route("/api/reports/<report_id>", methods=["PATCH"])
+@login_required
 def update_report(report_id):
-    """Allows Officer to update report status or notes"""
+    """Allows Officer/Admin to update report status or notes"""
     data = request.json or {}
     new_status = data.get("status")
     notes = data.get("officer_notes")
@@ -822,8 +939,9 @@ def update_report(report_id):
     return jsonify({"success": True, "message": "Updated successfully"})
 
 @app.route("/api/reports/<report_id>", methods=["DELETE"])
+@admin_required
 def delete_report(report_id):
-    """Deletes or dismisses a damage report"""
+    """Deletes a damage report — Admin only"""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM damage_reports WHERE id = ?", (report_id,))
@@ -901,14 +1019,12 @@ def get_analytics():
         damage_types[dtype] = damage_types.get(dtype, 0) + 1
 
         # Priority
-        p = r["priority"] or "LOW"
-        if p in priority_dist:
-            priority_dist[p] += 1
+        p = (r["priority"] or "LOW").upper().strip()
+        priority_dist[p] = priority_dist.get(p, 0) + 1
 
         # Status
-        st = r["status"] or "PENDING"
-        if st in status_dist:
-            status_dist[st] += 1
+        st = (r["status"] or "PENDING").upper().strip()
+        status_dist[st] = status_dist.get(st, 0) + 1
         if st == "RESOLVED":
             resolved_count += 1
 

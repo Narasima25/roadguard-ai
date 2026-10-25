@@ -1117,7 +1117,13 @@
       </div>
     </div>
 
-    <div class="header-actions">
+      <!-- User Badge -->
+      <div style="display:flex;align-items:center;gap:7px;padding:6px 12px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:600;color:#334155;">
+        <span>👤</span>
+        <span>{{ current_user or 'Officer' }}</span>
+        <span style="font-size:10px;padding:2px 7px;background:#dbeafe;color:#1d4ed8;border-radius:5px;font-weight:700;">{{ (current_role or 'officer')|upper }}</span>
+      </div>
+
       <div class="model-badge">
         <span>🤖</span>
         <span>{{ model_source }}</span>
@@ -1135,8 +1141,12 @@
         ⚡ + Seed Demo Incidents
       </button>
 
-      <a href="/mobile" target="_blank" class="btn btn-primary">
-        📱 Open Mobile Scanner
+      <a href="/mobile" target="_blank" class="btn btn-primary" title="Open Public Citizen Scanner Interface">
+        👥 Open People Portal
+      </a>
+
+      <a href="/logout" class="btn btn-outline" style="color:#ea580c;border-color:#fed7aa;" title="Sign out">
+        🚪 Logout
       </a>
     </div>
   </header>

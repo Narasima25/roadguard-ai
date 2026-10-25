@@ -5,6 +5,14 @@ import sys
 import subprocess
 from pathlib import Path
 
+# Fix emoji/Unicode output on Windows terminals
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 BASE_DIR = Path(__file__).resolve().parent
 SERVER_SCRIPT = BASE_DIR / "server" / "app.py"
 
